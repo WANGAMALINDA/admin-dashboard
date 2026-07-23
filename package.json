@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "version": "0.1.0",
-    "homepage": "https://WANGAMALINDA.github.io/Admin",
+    "homepage": "https://WANGAMALINDA.github.io/admin-dashboard",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
