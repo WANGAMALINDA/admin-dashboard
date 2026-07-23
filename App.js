@@ -24,7 +24,7 @@ function useIdleLogout(timeoutMs) {
     try {
       await supabase.auth.signOut();
     } finally {
-      navigate('/login');
+      navigate('/admin-dashboard');
     }
   }, [navigate]);
 
