@@ -71,7 +71,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AdminLogin />} />
+        <Route path="/admin-dashboard" element={<AdminLogin />} />
         <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
