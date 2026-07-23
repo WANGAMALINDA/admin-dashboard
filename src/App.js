@@ -69,9 +69,9 @@ function Dashboard() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/admin-dashboard">
       <Routes>
-        <Route path="/admin-dashboard" element={<AdminLogin />} />
+        <Route path="/" element={<AdminLogin />} />
         <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
