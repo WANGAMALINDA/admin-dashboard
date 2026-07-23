@@ -1,6 +1,7 @@
 {
   "name": "admin",
   "version": "0.1.0",
+    "homepage": "https://WANGAMALINDA.github.io/Admin",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
@@ -17,6 +18,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
