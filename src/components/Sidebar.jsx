@@ -1,0 +1,595 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "./supabaseClient"; // adjust path if your supabaseClient.js lives elsewhere
+import {
+  MapPin,
+  Search,
+  ChevronDown,
+  User,
+  LayoutDashboard,
+  FolderOpen,
+  ClipboardList,
+  BarChart3,
+  TriangleAlert,
+  Droplet,
+  Zap,
+  Leaf,
+  Shield,
+  Circle,
+  HeadphonesIcon,
+  Menu,
+  X,
+  LogOut,
+} from "lucide-react";
+
+const navItems = [
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "assignments", label: "Assignments", icon: ClipboardList },
+  { key: "analysis", label: "Analysis", icon: BarChart3 },
+];
+
+const ALL_ISSUES_ITEM = { key: "all", label: "All Issues", icon: Circle, color: "#111827" };
+const OTHER_FALLBACK = { icon: Circle, color: "#9ca3af" };
+
+// Icon/color per category, matched by keyword since categories only
+// store a name + description in the DB, not any styling. Keep this in
+// sync with the equivalent helper in home.jsx.
+const CATEGORY_VISUALS = [
+  { test: (n) => n.includes("water") || n.includes("sanitation"), icon: Droplet, color: "#3b82f6" },
+  { test: (n) => n.includes("road") || n.includes("infrastructure"), icon: TriangleAlert, color: "#f59e0b" },
+  { test: (n) => n.includes("util"), icon: Zap, color: "#10b981" },
+  { test: (n) => n.includes("environment"), icon: Leaf, color: "#16a34a" },
+  { test: (n) => n.includes("safety") || n.includes("security"), icon: Shield, color: "#a855f7" },
+];
+
+function getCategoryVisual(categoryName) {
+  const name = (categoryName || "").toLowerCase();
+  const match = CATEGORY_VISUALS.find((c) => c.test(name));
+  return match || OTHER_FALLBACK;
+}
+
+// profiles.role is one of 'citizen' | 'moderator' | 'admin'
+const roleLabels = { citizen: "Active Citizen", moderator: "Moderator", admin: "Administrator" };
+function roleLabel(role) {
+  return roleLabels[role] || roleLabels.citizen;
+}
+
+function NavRow({ item, active, onClick }) {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 16px",
+        borderRadius: 8,
+        fontSize: 14,
+        fontWeight: 500,
+        border: "none",
+        cursor: "pointer",
+        textAlign: "left",
+        transition: "background-color 0.15s, color 0.15s",
+        backgroundColor: active ? "#ecfdf5" : "transparent",
+        color: active ? "#047857" : "#374151",
+      }}
+    >
+      <Icon size={18} color={active ? "#059669" : "#6b7280"} />
+      <span style={{ flex: 1, textAlign: "left" }}>{item.label}</span>
+      {item.badge ? (
+        <span
+          style={{
+            minWidth: 20,
+            height: 20,
+            padding: "0 4px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 9999,
+            backgroundColor: "#059669",
+            color: "#fff",
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        >
+          {item.badge}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+export default function Sidebar({ children, activePage = "home", onPageChange, selectedCategory = "all", onCategoryChange, navItemsOverride, hideCategories = false }) {
+  const effectiveNavItems = navItemsOverride || navItems;
+  const contactHref = "tel:0664948899";
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+
+  // Categories pulled from the DB — selectedCategory/onCategoryChange now
+  // carry a categories.category_name string (or "all"), matching home.jsx.
+  const [categoryItems, setCategoryItems] = useState([ALL_ISSUES_ITEM]);
+
+  // Signed-in user's name/role/photo for the top-right account button.
+  const [currentUser, setCurrentUser] = useState({ name: "", role: "citizen", avatar: "" });
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) setMobileNavOpen(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCategories() {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, category_name")
+        .order("category_name", { ascending: true });
+
+      if (cancelled || error || !data) return;
+
+      const items = data.map((c) => {
+        const visual = getCategoryVisual(c.category_name);
+        return { key: c.category_name, label: c.category_name, icon: visual.icon, color: visual.color };
+      });
+      setCategoryItems([ALL_ISSUES_ITEM, ...items]);
+    }
+
+    async function loadCurrentUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled || !user) return;
+
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("full_name, role, profile_picture, username")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      setCurrentUser({
+        name: profileRow?.full_name || profileRow?.username || user.email || "User",
+        role: profileRow?.role || "citizen",
+        avatar: profileRow?.profile_picture || "",
+      });
+    }
+
+    loadCategories();
+    loadCurrentUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const closeMobileNav = () => {
+    if (isMobile) setMobileNavOpen(false);
+  };
+
+  const handleLogout = async () => {
+    closeMobileNav();
+    await supabase.auth.signOut();
+    navigate("/");
+  };
+
+  return (
+    <div style={{ height: "100vh", backgroundColor: "#f3f4f6", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Top bar */}
+      <header
+        style={{
+          height: 64,
+          backgroundColor: "#fff",
+          borderBottom: "1px solid #e5e7eb",
+          display: "flex",
+          alignItems: "center",
+          padding: isMobile ? "0 8px" : "0 16px",
+          gap: isMobile ? 6 : 16,
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={() => setMobileNavOpen((open) => !open)}
+          aria-label="Toggle navigation"
+          style={{
+            padding: 6,
+            color: "#6b7280",
+            background: "none",
+            border: "none",
+            borderRadius: 6,
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <Menu size={20} />
+        </button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: isMobile ? 0 : 16, minWidth: 0, flexShrink: isMobile ? 1 : 0 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              backgroundColor: "#059669",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <MapPin size={16} color="#fff" />
+          </div>
+          {!isMobile && (
+            <div style={{ lineHeight: 1.2 }}>
+              <p style={{ margin: 0, fontWeight: 700, color: "#111827", fontSize: 16 }}>
+                Track<span style={{ color: "#059669" }}>Serv</span>
+              </p>
+              <p style={{ margin: 0, marginTop: -2, fontSize: 11, color: "#6b7280" }}>
+                Unified Citizen Hub
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Search — full inline bar on desktop/tablet, icon toggle + overlay row on mobile */}
+        {!isMobile && (
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "min(100%, 576px)",
+              padding: "0 16px",
+            }}
+          >
+            <div style={{ position: "relative" }}>
+              <Search
+                size={16}
+                color="#9ca3af"
+                style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search issues, reports, community..."
+                style={{
+                  width: "100%",
+                  padding: "8px 12px 8px 36px",
+                  fontSize: 14,
+                  borderRadius: 9999,
+                  border: "1px solid #e5e7eb",
+                  backgroundColor: "#f9fafb",
+                  outline: "none",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        {isMobile && (
+          <button
+            onClick={() => setMobileSearchOpen((open) => !open)}
+            aria-label="Toggle search"
+            style={{
+              padding: 6,
+              color: mobileSearchOpen ? "#059669" : "#6b7280",
+              background: "none",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <Search size={18} />
+          </button>
+        )}
+
+        <button
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            paddingLeft: 8,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              backgroundColor: "#e5e7eb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#6b7280",
+              overflow: "hidden",
+              flexShrink: 0,
+            }}
+          >
+            {currentUser.avatar ? (
+              <img
+                src={currentUser.avatar}
+                alt={currentUser.name}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <User size={16} />
+            )}
+          </div>
+          {!isMobile && (
+            <div style={{ textAlign: "left", lineHeight: 1.2 }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#111827" }}>{currentUser.name || "Guest"}</p>
+              <p style={{ margin: 0, marginTop: -2, fontSize: 11, color: "#6b7280" }}>{roleLabel(currentUser.role)}</p>
+            </div>
+          )}
+          {!isMobile && <ChevronDown size={16} color="#9ca3af" />}
+        </button>
+      </header>
+
+      {/* Mobile search row — expands below the header instead of overlapping it */}
+      {isMobile && mobileSearchOpen && (
+        <div
+          style={{
+            backgroundColor: "#fff",
+            borderBottom: "1px solid #e5e7eb",
+            padding: "8px 12px",
+          }}
+        >
+          <div style={{ position: "relative" }}>
+            <Search
+              size={16}
+              color="#9ca3af"
+              style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search issues, reports, community..."
+              autoFocus
+              style={{
+                width: "100%",
+                padding: "8px 12px 8px 36px",
+                fontSize: 14,
+                borderRadius: 9999,
+                border: "1px solid #e5e7eb",
+                backgroundColor: "#f9fafb",
+                outline: "none",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flex: 1, position: "relative", minHeight: 0, overflow: "hidden" }}>
+        {/* Mobile overlay */}
+        {isMobile && mobileNavOpen && (
+          <div
+            onClick={() => setMobileNavOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 30,
+              backgroundColor: "rgba(0,0,0,0.3)",
+            }}
+          />
+        )}
+
+        {/* Sidebar */}
+        <aside
+          style={{
+            width: isMobile ? "min(256px, 80vw)" : 256,
+            backgroundColor: "#fff",
+            borderRight: "1px solid #e5e7eb",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            transition: "transform 0.2s ease-in-out",
+            height: "calc(100vh - 64px)",
+            flexShrink: 0,
+            ...(isMobile
+              ? {
+                  position: "fixed",
+                  top: 64,
+                  bottom: 0,
+                  left: 0,
+                  zIndex: 40,
+                  transform: mobileNavOpen ? "translateX(0)" : "translateX(-100%)",
+                }
+              : { position: "static", transform: "none" }),
+          }}
+        >
+          {isMobile && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 16px",
+              }}
+            >
+              <span style={{ fontWeight: 600, color: "#111827" }}>Menu</span>
+              <button
+                onClick={() => setMobileNavOpen(false)}
+                aria-label="Close navigation"
+                style={{
+                  padding: 4,
+                  color: "#6b7280",
+                  background: "none",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+          )}
+
+          <nav style={{ padding: "16px 8px 0", display: "flex", flexDirection: "column", gap: 24, overflowY: "auto", minHeight: 0 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {effectiveNavItems.map((item) => (
+                <NavRow
+                  key={item.key}
+                  item={item}
+                  active={activePage === item.key}
+                  onClick={() => {
+                    onPageChange?.(item.key);
+                    closeMobileNav();
+                  }}
+                />
+              ))}
+            </div>
+
+            {!hideCategories && (
+            <div>
+              <p
+                style={{
+                  margin: 0,
+                  marginBottom: 4,
+                  padding: "0 16px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.05em",
+                  color: "#9ca3af",
+                }}
+              >
+                CATEGORIES
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {categoryItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = selectedCategory === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        onCategoryChange?.(item.key);
+                        closeMobileNav();
+                      }}
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "10px 16px",
+                        borderRadius: 8,
+                        fontSize: 14,
+                        fontWeight: 500,
+                        border: "none",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        backgroundColor: isActive ? "#ecfdf5" : "transparent",
+                        color: isActive ? "#047857" : "#374151",
+                      }}
+                    >
+                      <Icon size={18} color={item.color} />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            )}
+          </nav>
+
+          {/* Help card */}
+          <div
+            style={{
+              margin: 16,
+              padding: 16,
+              borderRadius: 12,
+              backgroundColor: "#ecfdf5",
+              border: "1px solid #d1fae5",
+            }}
+          >
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                backgroundColor: "#d1fae5",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 8,
+              }}
+            >
+              <HeadphonesIcon size={18} color="#059669" />
+            </div>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#111827" }}>Need help?</p>
+            <p style={{ margin: "2px 0 12px", fontSize: 12, color: "#6b7280" }}>
+              Contact our support team, we're here to help.
+            </p>
+            <a
+              href={contactHref}
+              style={{
+                width: "100%",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#047857",
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 500,
+                padding: "8px 0",
+                borderRadius: 8,
+                border: "none",
+                cursor: "pointer",
+                textDecoration: "none",
+              }}
+            >
+              Contact Support
+            </a>
+          </div>
+
+          {/* Log out */}
+          <div style={{ margin: "0 16px 16px" }}>
+            <button
+              onClick={handleLogout}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                backgroundColor: "#fff",
+                color: "#b91c1c",
+                fontSize: 14,
+                fontWeight: 600,
+                padding: "10px 0",
+                borderRadius: 8,
+                border: "1px solid #fecaca",
+                cursor: "pointer",
+              }}
+            >
+              <LogOut size={16} />
+              Log Out
+            </button>
+          </div>
+        </aside>
+
+          <main style={{ flex: 1, minHeight: 0, overflowY: "auto", backgroundColor: "rgba(229,231,235,0.7)" }}>
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
