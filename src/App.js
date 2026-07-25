@@ -53,9 +53,12 @@ function Dashboard() {
     : activePage === 'analysis'
     ? <AnalysisPage />
     : activePage === 'reports'
-    ? <ReportsPage selectedCategory={selectedCategory} />
-    // 'dashboard' is now the Locations overview — stats, the live map, and
-    // the recent-locations table — so it's the map-driven home page.
+    ? (
+        <ReportsPage 
+          selectedCategory={selectedCategory} 
+          onCategoryChange={setSelectedCategory} 
+        />
+      )
     : <AdminLocations />;
 
   return (

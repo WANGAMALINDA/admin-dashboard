@@ -12,6 +12,13 @@ import {
   Zap,
   Leaf,
   Shield,
+  Trash2,
+  Home,
+  Bus,
+  HeartPulse,
+  GraduationCap,
+  Trees,
+  CircleHelp,
   FileText,
   Clock,
   CheckCircle2,
@@ -25,7 +32,7 @@ import {
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
-/* Design tokens                                                       */
+/* Design tokens & Category Icons                                     */
 /* ------------------------------------------------------------------ */
 const COLORS = {
   green900: "#064E3B",
@@ -53,16 +60,22 @@ const COLORS = {
 };
 
 const CATEGORY_ICON_FALLBACKS = [
-  { match: /water|sanitation/i, icon: Droplet, color: "#3B82F6" },
-  { match: /road|infrastructure|pothole/i, icon: TriangleAlert, color: "#F59E0B" },
-  { match: /utilit|power|electric|light/i, icon: Zap, color: "#10B981" },
-  { match: /environment|waste|dump/i, icon: Leaf, color: "#16A34A" },
-  { match: /safety|security/i, icon: Shield, color: "#A855F7" },
+  { match: /water|sanitation|sewer|pipe|leak/i, icon: Droplet, color: "#3B82F6" },
+  { match: /road|infrastructure|pothole|traffic|bridge/i, icon: TriangleAlert, color: "#F59E0B" },
+  { match: /util|power|electr|light|grid/i, icon: Zap, color: "#10B981" },
+  { match: /environment|pollution|nature|air/i, icon: Leaf, color: "#16A34A" },
+  { match: /safety|security|crime|police/i, icon: Shield, color: "#A855F7" },
+  { match: /waste|garbage|dump|refuse|litter/i, icon: Trash2, color: "#EF4444" },
+  { match: /housing|building|structure|shelter/i, icon: Home, color: "#8B5CF6" },
+  { match: /transport|bus|transit|vehicle/i, icon: Bus, color: "#06B6D4" },
+  { match: /health|clinic|hospital|medical/i, icon: HeartPulse, color: "#EC4899" },
+  { match: /education|school|library/i, icon: GraduationCap, color: "#6366F1" },
+  { match: /park|recreation|garden|green/i, icon: Trees, color: "#059669" },
 ];
 
 function categoryMeta(name) {
   const found = CATEGORY_ICON_FALLBACKS.find((c) => c.match.test(name || ""));
-  return found || { icon: FileText, color: COLORS.ink500 };
+  return found || { icon: CircleHelp, color: COLORS.ink500 };
 }
 
 function deriveTitle(title, categoryName) {
@@ -324,7 +337,7 @@ function ReportViewModal({ report, onClose }) {
 
 const PAGE_SIZE = 8;
 
-export default function ReportsPage() {
+export default function ReportsPage({ selectedCategory = "all", onCategoryChange }) {
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -332,10 +345,23 @@ export default function ReportsPage() {
   const [updatingId, setUpdatingId] = useState(null);
 
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState(selectedCategory);
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState(null);
+
+  useEffect(() => {
+    setCategory(selectedCategory);
+    setPage(1);
+  }, [selectedCategory]);
+
+  const handleCategoryChange = (val) => {
+    setCategory(val);
+    setPage(1);
+    if (onCategoryChange) {
+      onCategoryChange(val);
+    }
+  };
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -368,7 +394,6 @@ export default function ReportsPage() {
       return;
     }
 
-    // Identify highest vote count for dynamic high-priority calculation
     const activeReports = (reportRows || []).filter((r) =>
       ["open", "in_progress", "under_review"].includes(r.status)
     );
@@ -378,7 +403,6 @@ export default function ReportsPage() {
       const categoryName = r.categories?.category_name || "Uncategorized";
       const votesCount = r.votes || 0;
 
-      // Dynamic High Priority evaluation based on vote leaderboard
       const isTopVoted = votesCount > 0 && votesCount === maxActiveVotes;
       const calculatedSeverity = isTopVoted ? "High" : r.severity || "Low";
 
@@ -402,7 +426,6 @@ export default function ReportsPage() {
     fetchReports();
   }, [fetchReports]);
 
-  // Realtime updates on reports
   useEffect(() => {
     const channel = supabase
       .channel("reports-admin-list")
@@ -435,7 +458,11 @@ export default function ReportsPage() {
 
   const filtered = useMemo(() => {
     return reports.filter((r) => {
-      if (category !== "all" && r.category_id !== category) return false;
+      if (category !== "all") {
+        const matchesId = r.category_id === category;
+        const matchesName = r.categoryName?.toLowerCase() === category.toLowerCase();
+        if (!matchesId && !matchesName) return false;
+      }
       if (status !== "all" && r.status !== status) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -557,8 +584,8 @@ export default function ReportsPage() {
               </div>
               <Select
                 value={category}
-                onChange={updateFilter(setCategory)}
-                options={categories.map((c) => ({ value: c.id, label: c.category_name }))}
+                onChange={handleCategoryChange}
+                options={categories.map((c) => ({ value: c.category_name, label: c.category_name }))}
                 placeholder="All Categories"
               />
               <Select

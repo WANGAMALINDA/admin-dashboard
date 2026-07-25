@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "./supabaseClient"; // adjust path if your supabaseClient.js lives elsewhere
+import { supabase } from "./supabaseClient";
 import {
   MapPin,
   Search,
@@ -15,11 +15,17 @@ import {
   Zap,
   Leaf,
   Shield,
-  Circle,
-  HeadphonesIcon,
+  Trash2,
+  Home,
+  Bus,
+  HeartPulse,
+  GraduationCap,
+  Trees,
+  CircleHelp,
   Menu,
   X,
   LogOut,
+  Headphones,
 } from "lucide-react";
 
 const navItems = [
@@ -29,18 +35,22 @@ const navItems = [
   { key: "analysis", label: "Analysis", icon: BarChart3 },
 ];
 
-const ALL_ISSUES_ITEM = { key: "all", label: "All Issues", icon: Circle, color: "#111827" };
-const OTHER_FALLBACK = { icon: Circle, color: "#9ca3af" };
+const ALL_ISSUES_ITEM = { key: "all", label: "All Issues", icon: FolderOpen, color: "#111827" };
+const OTHER_FALLBACK = { icon: CircleHelp, color: "#6b7280" };
 
-// Icon/color per category, matched by keyword since categories only
-// store a name + description in the DB, not any styling. Keep this in
-// sync with the equivalent helper in home.jsx.
+// Comprehensive list of category icons and colors
 const CATEGORY_VISUALS = [
-  { test: (n) => n.includes("water") || n.includes("sanitation"), icon: Droplet, color: "#3b82f6" },
-  { test: (n) => n.includes("road") || n.includes("infrastructure"), icon: TriangleAlert, color: "#f59e0b" },
-  { test: (n) => n.includes("util"), icon: Zap, color: "#10b981" },
-  { test: (n) => n.includes("environment"), icon: Leaf, color: "#16a34a" },
-  { test: (n) => n.includes("safety") || n.includes("security"), icon: Shield, color: "#a855f7" },
+  { test: (n) => /water|sanitation|sewer|pipe|leak/i.test(n), icon: Droplet, color: "#3b82f6" },
+  { test: (n) => /road|infrastructure|pothole|traffic|bridge/i.test(n), icon: TriangleAlert, color: "#f59e0b" },
+  { test: (n) => /util|power|electr|light|grid/i.test(n), icon: Zap, color: "#10b981" },
+  { test: (n) => /environment|pollution|nature|air/i.test(n), icon: Leaf, color: "#16a34a" },
+  { test: (n) => /safety|security|crime|police/i.test(n), icon: Shield, color: "#a855f7" },
+  { test: (n) => /waste|garbage|dump|refuse|litter/i.test(n), icon: Trash2, color: "#ef4444" },
+  { test: (n) => /housing|building|structure|shelter/i.test(n), icon: Home, color: "#8b5cf6" },
+  { test: (n) => /transport|bus|transit|vehicle/i.test(n), icon: Bus, color: "#06b6d4" },
+  { test: (n) => /health|clinic|hospital|medical/i.test(n), icon: HeartPulse, color: "#ec4899" },
+  { test: (n) => /education|school|library/i.test(n), icon: GraduationCap, color: "#6366f1" },
+  { test: (n) => /park|recreation|garden|green/i.test(n), icon: Trees, color: "#059669" },
 ];
 
 function getCategoryVisual(categoryName) {
@@ -49,7 +59,6 @@ function getCategoryVisual(categoryName) {
   return match || OTHER_FALLBACK;
 }
 
-// profiles.role is one of 'citizen' | 'moderator' | 'admin'
 const roleLabels = { citizen: "Active Citizen", moderator: "Moderator", admin: "Administrator" };
 function roleLabel(role) {
   return roleLabels[role] || roleLabels.citizen;
@@ -102,7 +111,15 @@ function NavRow({ item, active, onClick }) {
   );
 }
 
-export default function Sidebar({ children, activePage = "home", onPageChange, selectedCategory = "all", onCategoryChange, navItemsOverride, hideCategories = false }) {
+export default function Sidebar({
+  children,
+  activePage = "home",
+  onPageChange,
+  selectedCategory = "all",
+  onCategoryChange,
+  navItemsOverride,
+  hideCategories = false,
+}) {
   const effectiveNavItems = navItemsOverride || navItems;
   const contactHref = "tel:0664948899";
   const navigate = useNavigate();
@@ -113,11 +130,7 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
     typeof window !== "undefined" ? window.innerWidth < 768 : false
   );
 
-  // Categories pulled from the DB — selectedCategory/onCategoryChange now
-  // carry a categories.category_name string (or "all"), matching home.jsx.
   const [categoryItems, setCategoryItems] = useState([ALL_ISSUES_ITEM]);
-
-  // Signed-in user's name/role/photo for the top-right account button.
   const [currentUser, setCurrentUser] = useState({ name: "", role: "citizen", avatar: "" });
 
   useEffect(() => {
@@ -145,7 +158,12 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
         const visual = getCategoryVisual(c.category_name);
         return { key: c.category_name, label: c.category_name, icon: visual.icon, color: visual.color };
       });
-      setCategoryItems([ALL_ISSUES_ITEM, ...items]);
+
+      // Separate "Other" / "Others" to force it to the bottom of the list
+      const regularItems = items.filter((item) => !/^other(s)?$/i.test(item.label));
+      const otherItems = items.filter((item) => /^other(s)?$/i.test(item.label));
+
+      setCategoryItems([ALL_ISSUES_ITEM, ...regularItems, ...otherItems]);
     }
 
     async function loadCurrentUser() {
@@ -244,7 +262,6 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
           )}
         </div>
 
-        {/* Search — full inline bar on desktop/tablet, icon toggle + overlay row on mobile */}
         {!isMobile && (
           <div
             style={{
@@ -345,7 +362,6 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
         </button>
       </header>
 
-      {/* Mobile search row — expands below the header instead of overlapping it */}
       {isMobile && mobileSearchOpen && (
         <div
           style={{
@@ -380,7 +396,6 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
       )}
 
       <div style={{ display: "flex", flex: 1, position: "relative", minHeight: 0, overflow: "hidden" }}>
-        {/* Mobile overlay */}
         {isMobile && mobileNavOpen && (
           <div
             onClick={() => setMobileNavOpen(false)}
@@ -393,7 +408,6 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
           />
         )}
 
-        {/* Sidebar */}
         <aside
           style={{
             width: isMobile ? "min(256px, 80vw)" : 256,
@@ -460,58 +474,57 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
             </div>
 
             {!hideCategories && (
-            <div>
-              <p
-                style={{
-                  margin: 0,
-                  marginBottom: 4,
-                  padding: "0 16px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: "0.05em",
-                  color: "#9ca3af",
-                }}
-              >
-                CATEGORIES
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {categoryItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = selectedCategory === item.key;
-                  return (
-                    <button
-                      key={item.key}
-                      onClick={() => {
-                        onCategoryChange?.(item.key);
-                        closeMobileNav();
-                      }}
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "10px 16px",
-                        borderRadius: 8,
-                        fontSize: 14,
-                        fontWeight: 500,
-                        border: "none",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        backgroundColor: isActive ? "#ecfdf5" : "transparent",
-                        color: isActive ? "#047857" : "#374151",
-                      }}
-                    >
-                      <Icon size={18} color={item.color} />
-                      <span>{item.label}</span>
-                    </button>
-                  );
-                })}
+              <div>
+                <p
+                  style={{
+                    margin: 0,
+                    marginBottom: 4,
+                    padding: "0 16px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: "0.05em",
+                    color: "#9ca3af",
+                  }}
+                >
+                  CATEGORIES
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {categoryItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = selectedCategory === item.key;
+                    return (
+                      <button
+                        key={item.key}
+                        onClick={() => {
+                          onCategoryChange?.(item.key);
+                          closeMobileNav();
+                        }}
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          padding: "10px 16px",
+                          borderRadius: 8,
+                          fontSize: 14,
+                          fontWeight: 500,
+                          border: "none",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          backgroundColor: isActive ? "#ecfdf5" : "transparent",
+                          color: isActive ? "#047857" : "#374151",
+                        }}
+                      >
+                        <Icon size={18} color={item.color} />
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
             )}
           </nav>
 
-          {/* Help card */}
           <div
             style={{
               margin: 16,
@@ -533,7 +546,7 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
                 marginBottom: 8,
               }}
             >
-              <HeadphonesIcon size={18} color="#059669" />
+              <Headphones size={18} color="#059669" />
             </div>
             <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#111827" }}>Need help?</p>
             <p style={{ margin: "2px 0 12px", fontSize: 12, color: "#6b7280" }}>
@@ -561,7 +574,6 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
             </a>
           </div>
 
-          {/* Log out */}
           <div style={{ margin: "0 16px 16px" }}>
             <button
               onClick={handleLogout}
@@ -587,7 +599,7 @@ export default function Sidebar({ children, activePage = "home", onPageChange, s
           </div>
         </aside>
 
-          <main style={{ flex: 1, minHeight: 0, overflowY: "auto", backgroundColor: "rgba(229,231,235,0.7)" }}>
+        <main style={{ flex: 1, minHeight: 0, overflowY: "auto", backgroundColor: "rgba(229,231,235,0.7)" }}>
           {children}
         </main>
       </div>
