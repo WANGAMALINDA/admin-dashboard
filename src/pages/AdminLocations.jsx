@@ -119,6 +119,7 @@ export default function AdminLocations() {
   const [showFilters, setShowFilters] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedStatus, setSelectedStatus] = useState("All Statuses");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newLocation, setNewLocation] = useState({
     title: "",
@@ -221,12 +222,17 @@ export default function AdminLocations() {
   const statusOptions = ["All Statuses", ...Object.values(STATUS_META).map((m) => m.label)];
 
   const filteredLocations = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return rows.filter((item) => {
       if (selectedCategory !== "All Categories" && item.category !== selectedCategory) return false;
       if (selectedStatus !== "All Statuses" && item.statusLabel !== selectedStatus) return false;
+      if (query) {
+        const haystack = `${item.title} ${item.location} ${item.category}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
       return true;
     });
-  }, [rows, selectedCategory, selectedStatus]);
+  }, [rows, selectedCategory, selectedStatus, searchQuery]);
 
   const recentLocations = useMemo(() => filteredLocations.slice(0, 4), [filteredLocations]);
 
@@ -343,6 +349,7 @@ export default function AdminLocations() {
   const handleResetFilters = () => {
     setSelectedCategory("All Categories");
     setSelectedStatus("All Statuses");
+    setSearchQuery("");
     setNotification("Filters have been reset.");
   };
 
@@ -512,6 +519,15 @@ export default function AdminLocations() {
                   <div className="filters-header">
                     <p className="card-title">Location Filters</p>
                     <p className="card-subtitle">Narrow your view by category or status.</p>
+                  </div>
+                  <div className="filter-group">
+                    <label>Search Location</label>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search by title, area or category"
+                    />
                   </div>
                   <div className="filter-group">
                     <label>Category</label>

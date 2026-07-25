@@ -11,6 +11,28 @@
     />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <script type="text/javascript">
+      // Single Page Apps for GitHub Pages
+      // https://github.com/rafgraph/spa-github-pages
+      // MIT licensed
+      // ----------------------------------------------------------------------
+      // Undoes the redirect that 404.html performs, restoring the real path
+      // (e.g. /admin-dashboard/dashboard) via history.replaceState BEFORE
+      // React Router mounts and reads window.location. Must run here, in
+      // <head>, ahead of the bundled app scripts.
+      (function (l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search
+            .slice(1)
+            .split('&')
+            .map(function (s) {
+              return s.replace(/~and~/g, '&');
+            })
+            .join('?');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+        }
+      })(window.location);
+    </script>
     <title>TrackServ Admin Portal</title>
   </head>
   <body>

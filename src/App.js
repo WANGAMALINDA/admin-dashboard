@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { supabase } from './components/supabaseClient'
 import AdminLogin from './pages/AdminLogin'
 import ReportsPage from './pages/ReportsPage'
@@ -75,12 +75,15 @@ function Dashboard() {
 
 function App() {
   return (
-    <BrowserRouter basename="/admin-dashboard">
+    <HashRouter>
       <Routes>
         <Route path="/" element={<AdminLogin />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        {/* Any unrecognized path (e.g. a stale/bad link) falls back to login
+            instead of rendering a blank screen. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
