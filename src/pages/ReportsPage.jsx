@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "../components/supabaseClient";
+import Footer from "../components/footer";
 import {
   Search,
   Filter,
@@ -20,6 +21,7 @@ import {
   ImageOff,
   User,
   Users,
+  ThumbsUp,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -57,20 +59,16 @@ const CATEGORY_ICON_FALLBACKS = [
   { match: /environment|waste|dump/i, icon: Leaf, color: "#16A34A" },
   { match: /safety|security/i, icon: Shield, color: "#A855F7" },
 ];
+
 function categoryMeta(name) {
   const found = CATEGORY_ICON_FALLBACKS.find((c) => c.match.test(name || ""));
   return found || { icon: FileText, color: COLORS.ink500 };
 }
 
-/* Reports don't always come in with a title from the reporter — fall back
-   to the category name so the UI never shows a blank/"Untitled" row. */
 function deriveTitle(title, categoryName) {
   return title || categoryName || "Untitled report";
 }
 
-/* A report is assigned to EITHER a person (free-typed name, stored in the
-   `assigned_to` text column) OR a group (`assigned_to_group_id`), never
-   both — pick whichever side is populated for display. */
 function assigneeInfo(r) {
   if (r.assigned_to_group_id && r.assigned_group) {
     return { type: "group", label: r.assigned_group.name };
@@ -81,12 +79,9 @@ function assigneeInfo(r) {
   return { type: null, label: null };
 }
 
-/* Pull the photo actually submitted with the report (earliest upload in
-   report_images) rather than showing a raw id. */
 function firstReportPhoto(images) {
   if (!images || images.length === 0) return null;
-  return [...images].sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at))[0]
-    .image_url;
+  return [...images].sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at))[0].image_url;
 }
 
 function PhotoThumb({ src, color, size = 40, radius = 10 }) {
@@ -119,18 +114,16 @@ function PhotoThumb({ src, color, size = 40, radius = 10 }) {
   );
 }
 
-/* DB status -> UI status. DB: open, in_progress, under_review, resolved, rejected, closed */
 const STATUS_META = {
-  open: { label: "Open", bg: COLORS.blue100, fg: "#1D4ED8" },
+  open: { label: "Open", bg: COLORS.red100, fg: "#B91C1C" },
   in_progress: { label: "In Progress", bg: COLORS.amber100, fg: "#92400E" },
-  under_review: { label: "Under Review", bg: COLORS.purple100, fg: "#7E22CE" },
+  under_review: { label: "Under Review", bg: "#EDE9FE", fg: "#6D28D9" },
   resolved: { label: "Resolved", bg: COLORS.green100, fg: COLORS.green700 },
   rejected: { label: "Rejected", bg: COLORS.red100, fg: "#991B1B" },
-  closed: { label: "Closed", bg: COLORS.ink100, fg: COLORS.ink700 },
+  closed: { label: "Closed", bg: COLORS.green100, fg: COLORS.green700 },
 };
 const STATUS_OPTIONS = Object.keys(STATUS_META);
 
-/* DB severity -> priority pill. DB: Low, Medium, High */
 const PRIORITY_META = {
   Low: { label: "Low", bg: COLORS.green100, fg: COLORS.green700 },
   Medium: { label: "Medium", bg: COLORS.amber100, fg: "#92400E" },
@@ -148,9 +141,6 @@ function formatDate(iso) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Small building blocks                                               */
-/* ------------------------------------------------------------------ */
 function Pill({ bg, fg, children }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, background: bg, color: fg }}>
@@ -173,7 +163,7 @@ function Btn({ variant = "ghost", children, style, ...rest }) {
 
 function IconBtn({ children, ...rest }) {
   return (
-    <button {...rest} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.ink200}`, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: rest.disabled ? "not-allowed" : "pointer", color: COLORS.ink500, flexShrink: 0 }}>
+    <button {...rest} style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${COLORS.ink200}`, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: rest.disabled ? "not-allowed" : "pointer", color: COLORS.ink500, flexShrink: 0 }}>
       {children}
     </button>
   );
@@ -209,27 +199,21 @@ function Select({ value, onChange, options, placeholder }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Stat card                                                            */
-/* ------------------------------------------------------------------ */
 function StatCard({ card }) {
   const Icon = card.icon;
   return (
-    <div style={{ background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 14, padding: "18px 18px 16px", flex: "1 1 190px", minWidth: 170 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: card.bg, color: card.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon size={17} />
+    <div style={{ background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 12, padding: "13px 13px 12px", flex: "1 1 160px", minWidth: 150 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 8, background: card.bg, color: card.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon size={13} />
         </div>
       </div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.ink900, lineHeight: 1.1 }}>{card.value}</div>
-      <div style={{ fontSize: 12.5, color: COLORS.ink500, marginTop: 2 }}>{card.label}</div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: COLORS.ink900, lineHeight: 1.1 }}>{card.value}</div>
+      <div style={{ fontSize: 11, color: COLORS.ink500, marginTop: 2 }}>{card.label}</div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Donut chart — pure CSS conic-gradient                               */
-/* ------------------------------------------------------------------ */
 function DonutChart({ segments, centerLabel, centerValue }) {
   const total = segments.reduce((s, x) => s + x.count, 0) || 1;
   let acc = 0;
@@ -240,19 +224,16 @@ function DonutChart({ segments, centerLabel, centerValue }) {
     return { stop: `${s.color} ${start}% ${acc}%`, pct };
   });
   return (
-    <div style={{ position: "relative", width: 168, height: 168, margin: "0 auto" }}>
+    <div style={{ position: "relative", width: 120, height: 120, margin: "0 auto" }}>
       <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: segments.length ? `conic-gradient(${stops.map((s) => s.stop).join(", ")})` : COLORS.ink100 }} />
-      <div style={{ position: "absolute", inset: 22, borderRadius: "50%", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.ink900 }}>{centerValue}</div>
-        <div style={{ fontSize: 11, color: COLORS.ink500 }}>{centerLabel}</div>
+      <div style={{ position: "absolute", inset: 16, borderRadius: "50%", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.ink900 }}>{centerValue}</div>
+        <div style={{ fontSize: 9.5, color: COLORS.ink500 }}>{centerLabel}</div>
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* View modal                                                          */
-/* ------------------------------------------------------------------ */
 function ReportViewModal({ report, onClose }) {
   if (!report) return null;
   const status = STATUS_META[report.status] || STATUS_META.open;
@@ -274,6 +255,9 @@ function ReportViewModal({ report, onClose }) {
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <Pill bg={status.bg} fg={status.fg}>{status.label}</Pill>
                 <Pill bg={priority.bg} fg={priority.fg}>{priority.label} priority</Pill>
+                <Pill bg={COLORS.blue100} fg={COLORS.blue500}>
+                  <ThumbsUp size={11} style={{ marginRight: 3 }} /> {report.votes || 0} votes
+                </Pill>
               </div>
             </div>
           </div>
@@ -338,9 +322,6 @@ function ReportViewModal({ report, onClose }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Main Reports panel                                                  */
-/* ------------------------------------------------------------------ */
 const PAGE_SIZE = 8;
 
 export default function ReportsPage() {
@@ -371,6 +352,7 @@ export default function ReportsPage() {
           assigned_group:groups!reports_assigned_to_group_id_fkey ( id, name ),
           report_images ( image_url, uploaded_at )
         `)
+        .order("votes", { ascending: false })
         .order("created_at", { ascending: false }),
       supabase.from("categories").select("id, category_name").order("category_name"),
     ]);
@@ -386,10 +368,24 @@ export default function ReportsPage() {
       return;
     }
 
+    // Identify highest vote count for dynamic high-priority calculation
+    const activeReports = (reportRows || []).filter((r) =>
+      ["open", "in_progress", "under_review"].includes(r.status)
+    );
+    const maxActiveVotes = activeReports.reduce((max, r) => Math.max(max, r.votes || 0), 0);
+
     const normalized = (reportRows || []).map((r) => {
       const categoryName = r.categories?.category_name || "Uncategorized";
+      const votesCount = r.votes || 0;
+
+      // Dynamic High Priority evaluation based on vote leaderboard
+      const isTopVoted = votesCount > 0 && votesCount === maxActiveVotes;
+      const calculatedSeverity = isTopVoted ? "High" : r.severity || "Low";
+
       return {
         ...r,
+        votes: votesCount,
+        severity: calculatedSeverity,
         categoryName,
         title: deriveTitle(r.title, categoryName),
         photoUrl: firstReportPhoto(r.report_images),
@@ -406,7 +402,7 @@ export default function ReportsPage() {
     fetchReports();
   }, [fetchReports]);
 
-  // Realtime: pick up changes made elsewhere (e.g. citizen edits, other admins)
+  // Realtime updates on reports
   useEffect(() => {
     const channel = supabase
       .channel("reports-admin-list")
@@ -421,7 +417,6 @@ export default function ReportsPage() {
 
   async function handleStatusChange(id, newStatus) {
     setUpdatingId(id);
-    // optimistic update so the admin UI feels instant
     setReports((list) => list.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
 
     const { error: updateErr } = await supabase
@@ -433,7 +428,6 @@ export default function ReportsPage() {
 
     if (updateErr) {
       setError(updateErr.message);
-      // roll back on failure
       fetchReports();
       return;
     }
@@ -456,7 +450,10 @@ export default function ReportsPage() {
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function updateFilter(setter) {
-    return (v) => { setter(v); setPage(1); };
+    return (v) => {
+      setter(v);
+      setPage(1);
+    };
   }
 
   const statCards = useMemo(() => {
@@ -468,9 +465,9 @@ export default function ReportsPage() {
     return [
       { key: "total", label: "Total Reports", value: total.toLocaleString(), icon: FileText, color: COLORS.green600, bg: COLORS.green100 },
       { key: "in_progress", label: "In Progress", value: inProgress.toLocaleString(), icon: Clock, color: COLORS.amber500, bg: COLORS.amber100 },
-      { key: "resolved", label: "Resolved", value: resolved.toLocaleString(), icon: CheckCircle2, color: COLORS.blue500, bg: COLORS.blue100 },
-      { key: "rejected", label: "Rejected", value: rejected.toLocaleString(), icon: XCircle, color: COLORS.purple500, bg: COLORS.purple100 },
-      { key: "under_review", label: "Under Review", value: underReview.toLocaleString(), icon: Flag, color: "#0EA5E9", bg: "#E0F2FE" },
+      { key: "resolved", label: "Resolved", value: resolved.toLocaleString(), icon: CheckCircle2, color: COLORS.green600, bg: COLORS.green100 },
+      { key: "rejected", label: "Rejected", value: rejected.toLocaleString(), icon: XCircle, color: "#DC2626", bg: COLORS.red100 },
+      { key: "under_review", label: "Under Review", value: underReview.toLocaleString(), icon: Flag, color: "#8B5CF6", bg: "#EDE9FE" },
     ];
   }, [reports]);
 
@@ -493,10 +490,17 @@ export default function ReportsPage() {
   }, [reports, viewing, updatingId]);
 
   function exportCsv() {
-    const header = ["ID", "Title", "Category", "Status", "Priority", "Location", "Assigned to", "Created at"];
+    const header = ["ID", "Title", "Category", "Votes", "Status", "Priority", "Location", "Assigned to", "Created at"];
     const rows = filtered.map((r) => [
-      r.id, r.title, r.categoryName, STATUS_META[r.status]?.label || r.status,
-      r.severity, r.location || "", r.assignee?.label || "", r.created_at,
+      r.id,
+      r.title,
+      r.categoryName,
+      r.votes || 0,
+      STATUS_META[r.status]?.label || r.status,
+      r.severity,
+      r.location || "",
+      r.assignee?.label || "",
+      r.created_at,
     ]);
     const csv = [header, ...rows].map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -509,160 +513,181 @@ export default function ReportsPage() {
   }
 
   return (
-    <div style={{ padding: "36px 40px 80px", maxWidth: 1400, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: "0 0 4px", fontSize: 26, fontWeight: 800, letterSpacing: "-.01em", color: COLORS.ink900 }}>Reports</h1>
-          <p style={{ margin: 0, color: COLORS.ink500, fontSize: 13.5 }}>View, manage and monitor all reported issues on the platform.</p>
+    <div className="home-page" style={{ backgroundColor: "#f3f4f6", minHeight: "100vh", paddingTop: 20, paddingBottom: 0, paddingLeft: 40 }}>
+      <div style={{ maxWidth: 1300, margin: "0 10", display: "flex", flexDirection: "column", gap: 20 }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ margin: "0 0 3px", fontWeight: 800, letterSpacing: "-.01em", color: COLORS.ink900 }}>Reports</h1>
+            <p style={{ margin: 0, color: COLORS.ink500, fontSize: 11.5 }}>View, manage and monitor all reported issues on the platform.</p>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn variant="ghost" onClick={exportCsv} disabled={loading || filtered.length === 0}>
+              <Download size={13} /> Export Report
+            </Btn>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <Btn variant="ghost" onClick={exportCsv} disabled={loading || filtered.length === 0}><Download size={15} /> Export Report</Btn>
+
+        {error && (
+          <div style={{ background: COLORS.red100, color: "#991B1B", borderRadius: 10, padding: "9px 12px", fontSize: 12, marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
+
+        {/* Stat cards */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+          {statCards.map((c) => (
+            <StatCard key={c.key} card={c} />
+          ))}
         </div>
-      </div>
 
-      {error && (
-        <div style={{ background: COLORS.red100, color: "#991B1B", borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
-          {error}
-        </div>
-      )}
-
-      {/* Stat cards */}
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 22 }}>
-        {statCards.map((c) => <StatCard key={c.key} card={c} />)}
-      </div>
-
-      {/* Body: table + side panel */}
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 640px", minWidth: 0 }}>
-          {/* Filters */}
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
-            <div style={{ flex: "1 1 220px", minWidth: 200, display: "flex", alignItems: "center", gap: 9, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 11, padding: "10px 14px" }}>
-              <Search size={15} color={COLORS.ink500} />
-              <input
-                value={search}
-                onChange={(e) => updateFilter(setSearch)(e.target.value)}
-                placeholder="Search reports…"
-                style={{ border: "none", outline: "none", fontSize: 13.5, fontFamily: "inherit", width: "100%", background: "transparent", color: COLORS.ink900 }}
+        {/* Body: table + side panel */}
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 640px", minWidth: 0 }}>
+            {/* Filters */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+              <div style={{ flex: "1 1 220px", minWidth: 200, display: "flex", alignItems: "center", gap: 9, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 10, padding: "8px 12px" }}>
+                <Search size={13} color={COLORS.ink500} />
+                <input
+                  value={search}
+                  onChange={(e) => updateFilter(setSearch)(e.target.value)}
+                  placeholder="Search reports…"
+                  style={{ border: "none", outline: "none", fontSize: 12, fontFamily: "inherit", width: "100%", background: "transparent", color: COLORS.ink900 }}
+                />
+              </div>
+              <Select
+                value={category}
+                onChange={updateFilter(setCategory)}
+                options={categories.map((c) => ({ value: c.id, label: c.category_name }))}
+                placeholder="All Categories"
               />
+              <Select
+                value={status}
+                onChange={updateFilter(setStatus)}
+                options={STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_META[s].label }))}
+                placeholder="All Statuses"
+              />
+              <Btn variant="ghost"><Filter size={14} /> Filters</Btn>
             </div>
-            <Select
-              value={category}
-              onChange={updateFilter(setCategory)}
-              options={categories.map((c) => ({ value: c.id, label: c.category_name }))}
-              placeholder="All Categories"
-            />
-            <Select
-              value={status}
-              onChange={updateFilter(setStatus)}
-              options={STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_META[s].label }))}
-              placeholder="All Statuses"
-            />
-            <Btn variant="ghost"><Filter size={14} /> Filters</Btn>
-          </div>
 
-          <div style={{ fontSize: 12.5, color: COLORS.ink500, marginBottom: 10 }}>
-            {loading ? "Loading reports…" : `Showing ${filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} reports`}
-          </div>
+            <div style={{ fontSize: 11, color: COLORS.ink500, marginBottom: 8 }}>
+              {loading ? "Loading reports…" : `Showing ${filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} reports`}
+            </div>
 
-          {/* Table */}
-          <div style={{ background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 14, overflow: "hidden" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: COLORS.ink100 }}>
-                    {["Photo", "Report Title", "Category", "Assigned To", "Status", "Priority"].map((h) => (
-                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".03em", color: COLORS.ink500, whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={6} style={{ padding: "40px 14px", textAlign: "center", color: COLORS.ink500 }}>
-                      <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Loading…
-                    </td></tr>
-                  ) : pageRows.length === 0 ? (
-                    <tr><td colSpan={6} style={{ padding: "40px 14px", textAlign: "center", color: COLORS.ink500 }}>No reports match your filters.</td></tr>
-                  ) : pageRows.map((r) => {
-                    const st = STATUS_META[r.status] || STATUS_META.open;
-                    const pr = PRIORITY_META[r.severity] || PRIORITY_META.Low;
-                    const cat = categoryMeta(r.categoryName);
-                    const CatIcon = cat.icon;
-                    return (
-                      <tr
-                        key={r.id}
-                        onClick={() => setViewing(r.id)}
-                        style={{ borderTop: `1px solid ${COLORS.ink100}`, cursor: "pointer" }}
-                      >
-                        <td style={{ padding: "12px 14px" }}>
-                          <PhotoThumb src={r.photoUrl} color={cat.color} />
+            {/* Table */}
+            <div style={{ background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+                  <thead>
+                    <tr style={{ background: COLORS.ink100 }}>
+                      {["Photo", "Report Title", "Category", "Assigned To", "Status", "Priority"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".03em", color: COLORS.ink500, whiteSpace: "nowrap" }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: "40px 14px", textAlign: "center", color: COLORS.ink500 }}>
+                          <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Loading…
                         </td>
-                        <td style={{ padding: "12px 14px", maxWidth: 220 }}>
-                          <div style={{ fontWeight: 700, color: COLORS.ink900 }}>{r.title}</div>
-                          <div style={{ fontSize: 11.5, color: COLORS.ink500 }}>{r.location || "No location"}</div>
-                        </td>
-                        <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, color: cat.color, fontWeight: 600, fontSize: 12.5 }}>
-                            {CatIcon && <CatIcon size={13} />} {r.categoryName}
-                          </div>
-                        </td>
-                        <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
-                          {r.assignee.label ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: COLORS.ink700 }}>
-                              {r.assignee.type === "group" ? <Users size={13} color={COLORS.ink500} /> : <User size={13} color={COLORS.ink500} />}
-                              {r.assignee.label}
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: 12.5, color: COLORS.ink300 }}>Unassigned</span>
-                          )}
-                        </td>
-                        <td style={{ padding: "12px 14px" }}><Pill bg={st.bg} fg={st.fg}>{st.label}</Pill></td>
-                        <td style={{ padding: "12px 14px" }}><Pill bg={pr.bg} fg={pr.fg}>{pr.label}</Pill></td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ) : pageRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: "40px 14px", textAlign: "center", color: COLORS.ink500 }}>No reports match your filters.</td>
+                      </tr>
+                    ) : (
+                      pageRows.map((r) => {
+                        const st = STATUS_META[r.status] || STATUS_META.open;
+                        const pr = PRIORITY_META[r.severity] || PRIORITY_META.Low;
+                        const cat = categoryMeta(r.categoryName);
+                        const CatIcon = cat.icon;
+                        return (
+                          <tr key={r.id} onClick={() => setViewing(r.id)} style={{ borderTop: `1px solid ${COLORS.ink100}`, cursor: "pointer" }}>
+                            <td style={{ padding: "9px 12px" }}>
+                              <PhotoThumb src={r.photoUrl} color={cat.color} />
+                            </td>
+                            <td style={{ padding: "9px 12px", maxWidth: 200 }}>
+                              <div style={{ fontWeight: 700, color: COLORS.ink900 }}>{r.title}</div>
+                              <div style={{ fontSize: 10.5, color: COLORS.ink500 }}>{r.location || "No location"}</div>
+                            </td>
+                            <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, color: cat.color, fontWeight: 600, fontSize: 11.5 }}>
+                                {CatIcon && <CatIcon size={12} />} {r.categoryName}
+                              </div>
+                            </td>
+                            <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                              {r.assignee.label ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: COLORS.ink700 }}>
+                                  {r.assignee.type === "group" ? <Users size={13} color={COLORS.ink500} /> : <User size={13} color={COLORS.ink500} />}
+                                  {r.assignee.label}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: 11.5, color: COLORS.ink300 }}>Unassigned</span>
+                              )}
+                            </td>
+                            <td style={{ padding: "9px 12px" }}>
+                              <Pill bg={st.bg} fg={st.fg}>{st.label}</Pill>
+                            </td>
+                            <td style={{ padding: "9px 12px" }}>
+                              <Pill bg={pr.bg} fg={pr.fg}>{pr.label}</Pill>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: `1px solid ${COLORS.ink100}`, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontSize: 11, color: COLORS.ink500 }}>
+                  Page {page} of {totalPages}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <IconBtn onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>‹</IconBtn>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 5).map((n) => (
+                    <button key={n} onClick={() => setPage(n)} style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${COLORS.ink200}`, background: page === n ? COLORS.green600 : "#fff", color: page === n ? "#fff" : COLORS.ink700, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                      {n}
+                    </button>
+                  ))}
+                  <IconBtn onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>›</IconBtn>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Side panel: donut + top categories */}
+          <div style={{ flex: "0 0 260px", width: 260, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 12, padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 11 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.ink900 }}>Report Overview</div>
             </div>
 
-            {/* Pagination */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderTop: `1px solid ${COLORS.ink100}`, flexWrap: "wrap", gap: 8 }}>
-              <div style={{ fontSize: 12.5, color: COLORS.ink500 }}>Page {page} of {totalPages}</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <IconBtn onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>‹</IconBtn>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 5).map((n) => (
-                  <button key={n} onClick={() => setPage(n)} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.ink200}`, background: page === n ? COLORS.green600 : "#fff", color: page === n ? "#fff" : COLORS.ink700, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>{n}</button>
-                ))}
-                <IconBtn onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>›</IconBtn>
-              </div>
+            <DonutChart segments={categoryBreakdown} centerValue={reports.length.toLocaleString()} centerLabel="Total" />
+
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: COLORS.ink500 }}>Top Categories</div>
+              {categoryBreakdown.length === 0 ? (
+                <div style={{ fontSize: 11, color: COLORS.ink500 }}>No data yet.</div>
+              ) : (
+                categoryBreakdown.slice(0, 6).map((c) => (
+                  <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.color, flexShrink: 0 }} />
+                    <span style={{ flex: 1, color: COLORS.ink700 }}>{c.name}</span>
+                    <span style={{ fontWeight: 700, color: COLORS.ink900 }}>{c.count}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
 
-        {/* Side panel: donut + top categories */}
-        <div style={{ flex: "0 0 300px", width: 300, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 14, padding: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: COLORS.ink900 }}>Report Overview</div>
-          </div>
-
-          <DonutChart segments={categoryBreakdown} centerValue={reports.length.toLocaleString()} centerLabel="Total" />
-
-          <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: COLORS.ink500 }}>Top Categories</div>
-            {categoryBreakdown.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: COLORS.ink500 }}>No data yet.</div>
-            ) : categoryBreakdown.slice(0, 6).map((c) => (
-              <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%", background: c.color, flexShrink: 0 }} />
-                <span style={{ flex: 1, color: COLORS.ink700 }}>{c.name}</span>
-                <span style={{ fontWeight: 700, color: COLORS.ink900 }}>{c.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ReportViewModal report={viewingReport} onClose={() => setViewing(null)} />
       </div>
-
-      <ReportViewModal report={viewingReport} onClose={() => setViewing(null)} />
+      <Footer />
     </div>
   );
 }

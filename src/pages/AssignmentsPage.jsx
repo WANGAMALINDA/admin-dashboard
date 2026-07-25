@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../components/supabaseClient";
+import Footer from "../components/footer";
 import {
   ClipboardList,
   Search,
@@ -19,6 +20,8 @@ import {
   CalendarPlus,
   Pencil,
   XCircle,
+  Flame,
+  ArrowBigUp,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -47,16 +50,7 @@ const COLORS = {
   ink100: "#F3F4F6",
 };
 
-/* An "assignment" is simply a report that's actively being worked:
-   in_progress or under_review. Marking it complete moves it to
-   resolved; reopening sends it back to in_progress. Because this reads
-   and writes the same `reports` rows the ReportsPage table does, a
-   change here shows up there immediately (and vice versa). */
 const ACTIVE_STATUSES = ["in_progress", "under_review"];
-
-/* Reports start life as "open" — that's the pool a new assignment is
-   created from. Assigning one just moves it to in_progress, which is
-   exactly what makes it show up in the list above. */
 const OPEN_STATUS = "open";
 
 const PRIORITY_LABEL = { Low: "Low", Medium: "Medium", High: "High" };
@@ -66,27 +60,17 @@ const PRIORITY_PILL = {
   High: { bg: COLORS.orange100, fg: "#9A3412" },
 };
 
-/* Reports don't always arrive with a title — fall back to the category
-   name so nothing shows up blank/"Untitled". */
 function deriveTitle(title, categoryName) {
   return title || categoryName || "Untitled report";
 }
 
-/* A report is assigned to EITHER a person (a free-typed name stored in the
-   `assigned_to` text column) OR a group (`assigned_to_group_id`), never
-   both. This just picks whichever side is populated for display purposes. */
 function assigneeInfo(r) {
-  if (r.assigned_to_group_id && r.assigned_group) {
-    return { type: "group", id: r.assigned_to_group_id, label: r.assigned_group.name };
-  }
   if (r.assigned_to) {
-    return { type: "user", id: null, label: r.assigned_to };
+    return { type: "assigned", id: null, label: r.assigned_to };
   }
   return { type: null, id: null, label: null };
 }
 
-/* The photo actually submitted with the report: earliest upload in
-   report_images, used in place of a raw id wherever a report is listed. */
 function firstReportPhoto(images) {
   if (!images || images.length === 0) return null;
   return [...images].sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at))[0]
@@ -142,23 +126,12 @@ function formatDateTime(iso) {
   );
 }
 
-/* datetime-local inputs want "YYYY-MM-DDTHH:mm" in local time, not ISO/UTC */
-function toDateTimeLocal(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d)) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 const EVENT_STATUS_PILL = {
   scheduled: { bg: COLORS.blue100, fg: "#1D4ED8", label: "Scheduled" },
   completed: { bg: COLORS.green100, fg: COLORS.green700, label: "Completed" },
   cancelled: { bg: COLORS.ink100, fg: COLORS.ink500, label: "Cancelled" },
 };
 
-/* Soonest still-scheduled visit, falling back to the most recently added
-   event if nothing is upcoming — used for the card preview. */
 function nextEvent(events) {
   if (!events || events.length === 0) return null;
   const scheduled = events.filter((e) => e.status === "scheduled");
@@ -166,9 +139,6 @@ function nextEvent(events) {
   return [...pool].sort((a, b) => new Date(a.start_date) - new Date(b.start_date))[0];
 }
 
-/* The admin-facing lifecycle is exactly 3 stages. "Completed" maps to
-   the DB's "resolved" status — there's no separate "completed" value
-   in the reports table, resolved is what it means here. */
 const STAGE_OPTIONS = [
   { key: "under_review", label: "Under Review", dbStatus: "under_review" },
   { key: "in_progress", label: "In Progress", dbStatus: "in_progress" },
@@ -178,20 +148,16 @@ const STAGE_OPTIONS = [
 function currentStageKey(status) {
   if (status === "under_review") return "under_review";
   if (status === "in_progress") return "in_progress";
-  return "completed"; // resolved / closed
+  return "completed";
 }
 
 function isStale(a) {
-  // Flag as "overdue" once a report has sat in progress/under review for 7+ days.
   if (a.status === "resolved" || a.status === "closed" || a.status === "rejected") return false;
   const created = new Date(a.created_at);
   const days = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
   return days >= 7;
 }
 
-/* ------------------------------------------------------------------ */
-/* Small building blocks                                               */
-/* ------------------------------------------------------------------ */
 function Pill({ bg, fg, children }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, background: bg, color: fg }}>
@@ -246,8 +212,6 @@ function IconBtn({ children, ...rest }) {
   );
 }
 
-/* Under Review -> In Progress -> Completed, settable directly (not just
-   forward) so an admin can correct a mistaken stage change too. */
 function StatusStepper({ status, busy, onChange, compact }) {
   const current = currentStageKey(status);
   return (
@@ -280,9 +244,6 @@ function StatusStepper({ status, busy, onChange, compact }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Assignment card                                                     */
-/* ------------------------------------------------------------------ */
 function AssignmentCard({ a, removing, busy, onView, onStageChange, onReject }) {
   const stale = isStale(a);
   const priorityStyle = PRIORITY_PILL[a.severity] || PRIORITY_PILL.Low;
@@ -291,55 +252,61 @@ function AssignmentCard({ a, removing, busy, onView, onStageChange, onReject }) 
     <div
       style={{
         background: "#fff",
-        border: `1px solid ${COLORS.ink200}`,
-        borderRadius: 16,
+        border: a.isTopVoted ? `1px solid ${COLORS.red500}` : `1px solid ${COLORS.ink200}`,
+        borderRadius: 13,
         boxShadow: "0 1px 2px rgba(17,24,39,0.04), 0 8px 24px -12px rgba(17,24,39,0.10)",
-        padding: 20,
+        padding: 14,
         display: "flex",
         flexDirection: "column",
-        gap: 12,
+        gap: 9,
         transition: "transform .18s ease, box-shadow .18s ease, opacity .26s ease",
         opacity: removing ? 0 : 1,
         transform: removing ? "translateX(40px) scale(.96)" : "none",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-        <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, minWidth: 0 }}>
           <PhotoThumb src={a.photoUrl} />
-          <div style={{ fontSize: 15.5, fontWeight: 700, lineHeight: 1.3, color: COLORS.ink900, alignSelf: "center" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.3, color: COLORS.ink900, alignSelf: "center" }}>
             {a.title}
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-          <Pill bg={priorityStyle.bg} fg={priorityStyle.fg}>{PRIORITY_LABEL[a.severity] || "Low"}</Pill>
-          <span style={{ fontSize: 10.5, color: COLORS.ink300 }}>{a.votes ?? 0} votes</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+          <Pill bg={priorityStyle.bg} fg={priorityStyle.fg}>
+            {a.isTopVoted && <Flame size={11} />}
+            {PRIORITY_LABEL[a.severity] || "Low"} priority
+          </Pill>
+          <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: COLORS.ink700 }}>
+            <ArrowBigUp size={14} color={a.votes > 0 ? COLORS.red500 : COLORS.ink500} fill={a.votes > 0 ? COLORS.red500 : "none"} />
+            <span>{a.votes ?? 0} votes</span>
+          </div>
         </div>
       </div>
 
-      <div style={{ fontSize: 12.5, color: COLORS.ink500, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 19 }}>
+      <div style={{ fontSize: 11, color: COLORS.ink500, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 17 }}>
         {a.description || "No description provided."}
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", fontSize: 12, color: COLORS.ink700 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, color: stale ? COLORS.red500 : COLORS.ink700, fontWeight: stale ? 700 : 400 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", fontSize: 10.5, color: COLORS.ink700 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, color: stale ? COLORS.red500 : COLORS.ink700, fontWeight: stale ? 700 : 400 }}>
           {stale ? "Stale · " : "Opened "}
           {formatDate(a.created_at)}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
         {a.categoryName && <Tag>{a.categoryName}</Tag>}
         {a.location && <Tag>{a.location}</Tag>}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: COLORS.ink700 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {a.assignee.type === "group" ? <Users size={12} color={COLORS.ink500} /> : <User size={12} color={COLORS.ink500} />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 10.5, color: COLORS.ink700 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <User size={11} color={COLORS.ink500} />
           {a.assignee.label || <span style={{ color: COLORS.ink300 }}>Unassigned</span>}
         </div>
         {a.nextEvent && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <CalendarClock size={12} color={COLORS.ink500} />
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <CalendarClock size={11} color={COLORS.ink500} />
             {formatDateTime(a.nextEvent.start_date)}
             {a.nextEvent.status !== "scheduled" && (
               <span style={{ color: COLORS.ink500 }}>· {EVENT_STATUS_PILL[a.nextEvent.status]?.label}</span>
@@ -350,12 +317,12 @@ function AssignmentCard({ a, removing, busy, onView, onStageChange, onReject }) 
 
       <StatusStepper status={a.status} busy={busy} onChange={(stage) => onStageChange(a.id, stage)} compact />
 
-      <div style={{ display: "flex", gap: 8, borderTop: `1px solid ${COLORS.ink100}`, paddingTop: 12 }}>
+      <div style={{ display: "flex", gap: 6, borderTop: `1px solid ${COLORS.ink100}`, paddingTop: 9 }}>
         <button onClick={() => onView(a.id)} style={actionBtnStyle()}>
-          <Eye size={13} /> View
+          <Eye size={12} /> View
         </button>
         <button onClick={() => onReject(a.id)} disabled={busy} style={actionBtnStyle(COLORS.red500)}>
-          <Ban size={13} /> Reject
+          <Ban size={12} /> Reject
         </button>
       </div>
     </div>
@@ -368,82 +335,21 @@ function actionBtnStyle(color) {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 4,
     background: "#fff",
     border: `1px solid ${COLORS.ink200}`,
-    borderRadius: 9,
-    padding: "7px 6px",
-    fontSize: 11.5,
+    borderRadius: 8,
+    padding: "6px 5px",
+    fontSize: 10.5,
     fontWeight: 600,
     color: color || COLORS.ink700,
     cursor: "pointer",
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* View modal                                                          */
-/* ------------------------------------------------------------------ */
-/* ------------------------------------------------------------------ */
-/* Searchable assignee combobox — type to filter people/groups          */
-/* ------------------------------------------------------------------ */
-function AssigneeCombobox({ options, selectedId, onSelect, placeholder }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-
-  const selected = options.find((o) => o.id === selectedId);
-  const displayValue = open ? query : selected ? selected.label : "";
-
-  const filtered = useMemo(() => {
-    if (!open || !query) return options;
-    const t = query.toLowerCase();
-    return options.filter((o) => o.label.toLowerCase().includes(t));
-  }, [options, query, open]);
-
-  return (
-    <div style={{ position: "relative", flex: 1 }}>
-      <input
-        value={displayValue}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-        onFocus={() => { setQuery(""); setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder={placeholder}
-        style={{ width: "100%", border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", boxSizing: "border-box" }}
-      />
-      {open && (
-        <div
-          style={{
-            position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#fff",
-            border: `1px solid ${COLORS.ink200}`, borderRadius: 10, boxShadow: "0 8px 24px -8px rgba(0,0,0,.15)",
-            maxHeight: 180, overflowY: "auto", zIndex: 20,
-          }}
-        >
-          {filtered.length === 0 ? (
-            <div style={{ padding: "10px 12px", fontSize: 12.5, color: COLORS.ink500 }}>No matches</div>
-          ) : (
-            filtered.map((opt) => (
-              <div
-                key={opt.id}
-                onMouseDown={(e) => { e.preventDefault(); onSelect(opt.id); setQuery(""); setOpen(false); }}
-                style={{
-                  padding: "9px 12px", fontSize: 13, color: opt.id === selectedId ? COLORS.green700 : COLORS.ink900,
-                  fontWeight: opt.id === selectedId ? 700 : 400, cursor: "pointer",
-                }}
-              >
-                {opt.label}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ViewModal({ assignment, onClose, onStageChange, onReject, busy, groups, onSaveAssignedTo, savingAssignedTo, onOpenSchedule, onEventStatusChange, eventBusyId }) {
+function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveAssignedTo, savingAssignedTo, onOpenSchedule, onEventStatusChange, eventBusyId }) {
   const [editingAssignee, setEditingAssignee] = useState(false);
-  const [draftType, setDraftType] = useState("user"); // "user" | "group"
-  const [draftName, setDraftName] = useState(""); // typed name, used when draftType === "user"
-  const [draftGroupId, setDraftGroupId] = useState(""); // used when draftType === "group"
+  const [draftName, setDraftName] = useState("");
 
   useEffect(() => {
     setEditingAssignee(false);
@@ -455,26 +361,18 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, groups,
   const events = [...(a.events || [])].sort((x, y) => new Date(x.start_date) - new Date(y.start_date));
 
   function startEditingAssignee() {
-    const isGroup = a.assignee.type === "group";
-    setDraftType(isGroup ? "group" : "user");
-    setDraftName(isGroup ? "" : a.assignee.label || "");
-    setDraftGroupId(isGroup ? a.assignee.id || "" : "");
+    setDraftName(a.assignee.label || "");
     setEditingAssignee(true);
   }
 
   function saveAssignee() {
-    if (draftType === "user") {
-      if (!draftName.trim()) return;
-      onSaveAssignedTo(a.id, "user", draftName.trim());
-    } else {
-      if (!draftGroupId) return;
-      onSaveAssignedTo(a.id, "group", draftGroupId);
-    }
+    if (!draftName.trim()) return;
+    onSaveAssignedTo(a.id, draftName.trim());
     setEditingAssignee(false);
   }
 
   function clearAssignee() {
-    onSaveAssignedTo(a.id, null, null);
+    onSaveAssignedTo(a.id, null);
     setEditingAssignee(false);
   }
 
@@ -486,9 +384,15 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, groups,
             <PhotoThumb src={a.photoUrl} size={56} radius={12} />
             <div>
               <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800 }}>{a.title}</h2>
-              <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
-                <Pill bg={priorityStyle.bg} fg={priorityStyle.fg}>{PRIORITY_LABEL[a.severity] || "Low"}</Pill>
-                <span style={{ fontSize: 11, color: COLORS.ink500 }}>{a.votes ?? 0} votes</span>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                <Pill bg={priorityStyle.bg} fg={priorityStyle.fg}>
+                  {a.isTopVoted && <Flame size={11} />}
+                  {PRIORITY_LABEL[a.severity] || "Low"} priority
+                </Pill>
+                <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: COLORS.ink700 }}>
+                  <ArrowBigUp size={14} color={a.votes > 0 ? COLORS.red500 : COLORS.ink500} fill={a.votes > 0 ? COLORS.red500 : "none"} />
+                  <span>{a.votes ?? 0} votes</span>
+                </div>
               </div>
             </div>
           </div>
@@ -503,50 +407,23 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, groups,
         <div style={{ marginBottom: 14 }}>
           <div style={rowLabelStyle()}>Assigned to</div>
           {editingAssignee ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", gap: 6 }}>
-                {[{ key: "user", label: "Person", icon: User }, { key: "group", label: "Group", icon: Users }].map((opt) => (
-                  <button
-                    key={opt.key}
-                    onClick={() => { setDraftType(opt.key); setDraftName(""); setDraftGroupId(""); }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, padding: "6px 10px", borderRadius: 8, cursor: "pointer",
-                      border: `1px solid ${draftType === opt.key ? COLORS.green600 : COLORS.ink200}`,
-                      background: draftType === opt.key ? COLORS.green50 : "#fff",
-                      color: draftType === opt.key ? COLORS.green700 : COLORS.ink700,
-                    }}
-                  >
-                    <opt.icon size={12} /> {opt.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                {draftType === "group" ? (
-                  <AssigneeCombobox
-                    options={groups}
-                    selectedId={draftGroupId}
-                    onSelect={setDraftGroupId}
-                    placeholder="Search groups…"
-                  />
-                ) : (
-                  <input
-                    value={draftName}
-                    onChange={(e) => setDraftName(e.target.value)}
-                    placeholder="Type a name…"
-                    style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", boxSizing: "border-box" }}
-                  />
-                )}
-                <IconBtn onClick={saveAssignee} disabled={savingAssignedTo || (draftType === "user" ? !draftName.trim() : !draftGroupId)}>
-                  {savingAssignedTo ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={13} />}
-                </IconBtn>
-                <IconBtn onClick={() => setEditingAssignee(false)} disabled={savingAssignedTo}>
-                  <X size={13} />
-                </IconBtn>
-              </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                placeholder="Type person or group name…"
+                style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit" }}
+              />
+              <IconBtn onClick={saveAssignee} disabled={savingAssignedTo || !draftName.trim()}>
+                {savingAssignedTo ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={13} />}
+              </IconBtn>
+              <IconBtn onClick={() => setEditingAssignee(false)} disabled={savingAssignedTo}>
+                <X size={13} />
+              </IconBtn>
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: COLORS.ink900 }}>
-              {a.assignee.type === "group" ? <Users size={14} color={COLORS.ink500} /> : <User size={14} color={COLORS.ink500} />}
+              <User size={14} color={COLORS.ink500} />
               {a.assignee.label || <span style={{ color: COLORS.ink500 }}>Unassigned</span>}
               <button onClick={startEditingAssignee} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.ink500, padding: 2, display: "flex" }}>
                 <Pencil size={12} />
@@ -645,9 +522,6 @@ function rowLabelStyle() {
   return { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: COLORS.ink500, marginBottom: 4 };
 }
 
-/* ------------------------------------------------------------------ */
-/* Reject confirm modal                                                */
-/* ------------------------------------------------------------------ */
 function RejectModal({ assignment, onCancel, onConfirm }) {
   if (!assignment) return null;
   return (
@@ -669,9 +543,6 @@ function RejectModal({ assignment, onCancel, onConfirm }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Schedule visit modal — inserts into the events table                */
-/* ------------------------------------------------------------------ */
 function ScheduleEventModal({ report, saving, error, onCancel, onSubmit }) {
   const [eventName, setEventName] = useState("Site visit");
   const [start, setStart] = useState("");
@@ -771,15 +642,10 @@ function fieldStyle() {
   return { width: "100%", border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" };
 }
 
-/* ------------------------------------------------------------------ */
-/* New assignment modal — pulls open reports and activates one          */
-/* ------------------------------------------------------------------ */
-function NewAssignmentRow({ report, groups, onAssign, assigning }) {
-  const [assigneeType, setAssigneeType] = useState("user"); // "user" | "group"
-  const [assigneeName, setAssigneeName] = useState(""); // typed name, used when assigneeType === "user"
-  const [assigneeGroupId, setAssigneeGroupId] = useState(""); // used when assigneeType === "group"
+function NewAssignmentRow({ report, onAssign, assigning }) {
+  const [assigneeName, setAssigneeName] = useState(""); 
   const priorityStyle = PRIORITY_PILL[report.severity] || PRIORITY_PILL.Low;
-  const canAssign = assigneeType === "user" ? !!assigneeName.trim() : !!assigneeGroupId;
+  const canAssign = !!assigneeName.trim();
 
   return (
     <div style={{ padding: "13px 4px", borderBottom: `1px solid ${COLORS.ink100}` }}>
@@ -794,52 +660,31 @@ function NewAssignmentRow({ report, groups, onAssign, assigning }) {
             {report.location && <span>· {report.location}</span>}
           </div>
         </div>
-        {/* Severity is computed on the backend from votes — read-only here. */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-          <Pill bg={priorityStyle.bg} fg={priorityStyle.fg}>{report.severity || "Low"}</Pill>
-          <span style={{ fontSize: 10, color: COLORS.ink300 }}>{report.votes ?? 0} votes</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+          <Pill bg={priorityStyle.bg} fg={priorityStyle.fg}>
+            {report.isTopVoted && <Flame size={11} />}
+            {report.severity || "Low"}
+          </Pill>
+          <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700, color: COLORS.ink700 }}>
+            <ArrowBigUp size={12} color={report.votes > 0 ? COLORS.red500 : COLORS.ink500} fill={report.votes > 0 ? COLORS.red500 : "none"} />
+            <span>{report.votes ?? 0} votes</span>
+          </div>
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 6 }}>
-          {[{ key: "user", label: "Person", icon: User }, { key: "group", label: "Group", icon: Users }].map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => { setAssigneeType(opt.key); setAssigneeName(""); setAssigneeGroupId(""); }}
-              disabled={assigning}
-              style={{
-                display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 600, padding: "6px 9px", borderRadius: 8, cursor: "pointer",
-                border: `1px solid ${assigneeType === opt.key ? COLORS.green600 : COLORS.ink200}`,
-                background: assigneeType === opt.key ? COLORS.green50 : "#fff",
-                color: assigneeType === opt.key ? COLORS.green700 : COLORS.ink700,
-              }}
-            >
-              <opt.icon size={11} /> {opt.label}
-            </button>
-          ))}
-        </div>
-        {assigneeType === "group" ? (
-          <AssigneeCombobox
-            options={groups}
-            selectedId={assigneeGroupId}
-            onSelect={setAssigneeGroupId}
-            placeholder="Search groups…"
-          />
-        ) : (
-          <input
-            value={assigneeName}
-            onChange={(e) => setAssigneeName(e.target.value)}
-            placeholder="Type a name…"
-            disabled={assigning}
-            style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }}
-          />
-        )}
+        <input
+          value={assigneeName}
+          onChange={(e) => setAssigneeName(e.target.value)}
+          placeholder="Type person or group name…"
+          disabled={assigning}
+          style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", boxSizing: "border-box" }}
+        />
         <Btn
           variant="primary"
           style={{ padding: "8px 14px", flexShrink: 0 }}
           disabled={assigning || !canAssign}
-          onClick={() => onAssign(report, assigneeType, assigneeType === "user" ? assigneeName.trim() : assigneeGroupId)}
+          onClick={() => onAssign(report, assigneeName.trim())}
         >
           {assigning ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Plus size={13} />}
           Assign
@@ -849,7 +694,7 @@ function NewAssignmentRow({ report, groups, onAssign, assigning }) {
   );
 }
 
-function NewAssignmentModal({ open, loading, error, reports, search, onSearch, groups, onAssign, assigningId, onClose }) {
+function NewAssignmentModal({ open, loading, error, reports, search, onSearch, onAssign, assigningId, onClose }) {
   if (!open) return null;
   return (
     <Overlay onClose={onClose}>
@@ -858,7 +703,7 @@ function NewAssignmentModal({ open, loading, error, reports, search, onSearch, g
           <div>
             <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800 }}>New Assignment</h2>
             <p style={{ margin: 0, fontSize: 12.5, color: COLORS.ink500 }}>
-              Pick an open report, choose a person or group to own it, then assign. It moves to Under Review and shows up in the list.
+              Pick an open report, choose a person or group to own it, then assign.
             </p>
           </div>
           <IconBtn onClick={onClose}><X size={15} /></IconBtn>
@@ -896,7 +741,6 @@ function NewAssignmentModal({ open, loading, error, reports, search, onSearch, g
               <NewAssignmentRow
                 key={r.id}
                 report={r}
-                groups={groups}
                 assigning={assigningId === r.id}
                 onAssign={onAssign}
               />
@@ -923,9 +767,6 @@ function modalStyle() {
   return { background: "#fff", borderRadius: 18, maxWidth: 460, width: "100%", boxShadow: "0 20px 50px -15px rgba(17,24,39,.25)", padding: 26, maxHeight: "88vh", overflowY: "auto" };
 }
 
-/* ------------------------------------------------------------------ */
-/* Toast                                                                */
-/* ------------------------------------------------------------------ */
 function Toast({ message }) {
   if (!message) return null;
   return (
@@ -936,9 +777,6 @@ function Toast({ message }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Empty state                                                         */
-/* ------------------------------------------------------------------ */
 function EmptyState({ title, text }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "70px 20px", color: COLORS.ink500 }}>
@@ -951,57 +789,44 @@ function EmptyState({ title, text }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Assignments page — reads/writes the same `reports` table as         */
-/* ReportsPage.jsx. No sidebar: this is a standalone panel meant to be */
-/* dropped into whatever layout/route already wraps it.                */
-/* ------------------------------------------------------------------ */
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
-  const [filter, setFilter] = useState("all"); // all | under_review | in_progress | high | stale
+  const [filter, setFilter] = useState("all"); 
   const [search, setSearch] = useState("");
   const [viewId, setViewId] = useState(null);
   const [rejectId, setRejectId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   const [toast, setToast] = useState("");
 
-  // Group directory used to populate the group assignee picker. People are
-  // assigned by typed name (assigned_to text column), not picked from a
-  // profiles list.
-  const [groups, setGroups] = useState([]);
   const [savingAssignedTo, setSavingAssignedTo] = useState(false);
 
-  // Scheduling (events table) state.
   const [scheduleTarget, setScheduleTarget] = useState(null);
   const [scheduling, setScheduling] = useState(false);
   const [scheduleError, setScheduleError] = useState(null);
   const [eventBusyId, setEventBusyId] = useState(null);
 
+  // Fetch assignments ordered by vote count descending, mirroring homepage priority
   const fetchAssignments = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    // No relationship to profiles here on purpose — the admin side never
-    // joins reports to user accounts. The reporter is intentionally not
-    // shown, and the assignee is a free-typed name (`assigned_to` text
-    // column), not a linked user.
     const { data, error: fetchErr } = await supabase
       .from("reports")
       .select(`
         id, title, description, location, status, severity, votes,
         additional_information, created_at, updated_at,
-        category_id, assigned_to, assigned_to_group_id, assigned_at,
+        category_id, assigned_to, assigned_at, assigned_to_group_id,
         categories ( id, category_name ),
-        assigned_group:groups!reports_assigned_to_group_id_fkey ( id, name ),
         report_images ( image_url, uploaded_at ),
         events ( id, event_name, description, location, event_date, start_date, end_date, status, notes, created_at )
       `)
       .in("status", ACTIVE_STATUSES)
-      .order("created_at", { ascending: true });
+      .order("votes", { ascending: false })
+      .order("created_at", { ascending: false });
 
     if (fetchErr) {
       setError(fetchErr.message);
@@ -1009,16 +834,33 @@ export default function AssignmentsPage() {
       return;
     }
 
+    // Determine the report with the highest vote count > 0 to auto-escalate priority
+    let leaderId = null;
+    let maxVotes = 0;
+    (data || []).forEach((r) => {
+      const v = r.votes || 0;
+      if (v > maxVotes) {
+        maxVotes = v;
+        leaderId = r.id;
+      }
+    });
+
     const normalized = (data || []).map((r) => {
       const categoryName = r.categories?.category_name || "Uncategorized";
+      const votes = r.votes || 0;
+      const isTopVoted = r.id === leaderId && votes > 0;
+
       return {
         ...r,
+        votes,
         categoryName,
         title: deriveTitle(r.title, categoryName),
         photoUrl: firstReportPhoto(r.report_images),
         assignee: assigneeInfo(r),
         events: r.events || [],
         nextEvent: nextEvent(r.events),
+        isTopVoted,
+        severity: isTopVoted ? "High" : r.severity || "Low",
       };
     });
 
@@ -1026,24 +868,17 @@ export default function AssignmentsPage() {
     setLoading(false);
   }, []);
 
-  // Group directory for the assignee picker — fetched once, refreshed on demand.
-  const fetchDirectories = useCallback(async () => {
-    const { data: groupRows } = await supabase.from("groups").select("id, name").order("name");
-    setGroups((groupRows || []).map((g) => ({ id: g.id, label: g.name })));
-  }, []);
-
-  async function saveAssignedTo(reportId, type, value) {
+  async function saveAssignedTo(reportId, value) {
     setSavingAssignedTo(true);
-    const payload =
-      type === "group"
-        ? { assigned_to_group_id: value, assigned_to: null }
-        : type === "user"
-        ? { assigned_to: value, assigned_to_group_id: null }
-        : { assigned_to: null, assigned_to_group_id: null };
 
     const { error: updateErr } = await supabase
       .from("reports")
-      .update({ ...payload, assigned_at: value ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+      .update({
+        assigned_to: value || null,
+        assigned_to_group_id: null,
+        assigned_at: value ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString()
+      })
       .eq("id", reportId);
 
     setSavingAssignedTo(false);
@@ -1052,14 +887,10 @@ export default function AssignmentsPage() {
       setError(updateErr.message);
       return;
     }
-    setToast('id' ? "Assignment updated" : "Assignment removed");
+    setToast(value ? "Assignment updated" : "Assignment removed");
     fetchAssignments();
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Scheduling: inserts/updates rows in the events table, linked via  */
-  /* events.report_id -> reports.id                                    */
-  /* ---------------------------------------------------------------- */
   function openSchedule(assignment) {
     setScheduleError(null);
     setScheduleTarget(assignment);
@@ -1070,12 +901,18 @@ export default function AssignmentsPage() {
     setScheduling(true);
     setScheduleError(null);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+
+    if (userErr || !userData?.user?.id) {
+      setScheduling(false);
+      setScheduleError("You need to be signed in to schedule a visit.");
+      return;
+    }
 
     const { error: insertErr } = await supabase.from("events").insert({
       report_id: scheduleTarget.id,
       ...fields,
-      created_by: userData?.user?.id || null,
+      created_by: userData.user.id,
     });
 
     setScheduling(false);
@@ -1104,9 +941,6 @@ export default function AssignmentsPage() {
     fetchAssignments();
   }
 
-  /* ---------------------------------------------------------------- */
-  /* New Assignment: pull open reports, let the admin activate one     */
-  /* ---------------------------------------------------------------- */
   const [showNewModal, setShowNewModal] = useState(false);
   const [openReports, setOpenReports] = useState([]);
   const [openLoading, setOpenLoading] = useState(false);
@@ -1127,7 +961,8 @@ export default function AssignmentsPage() {
         report_images ( image_url, uploaded_at )
       `)
       .eq("status", OPEN_STATUS)
-      .order("created_at", { ascending: true });
+      .order("votes", { ascending: false })
+      .order("created_at", { ascending: false });
 
     if (fetchErr) {
       setOpenError(fetchErr.message);
@@ -1135,13 +970,29 @@ export default function AssignmentsPage() {
       return;
     }
 
+    let leaderId = null;
+    let maxVotes = 0;
+    (data || []).forEach((r) => {
+      const v = r.votes || 0;
+      if (v > maxVotes) {
+        maxVotes = v;
+        leaderId = r.id;
+      }
+    });
+
     const normalized = (data || []).map((r) => {
       const categoryName = r.categories?.category_name || "Uncategorized";
+      const votes = r.votes || 0;
+      const isTopVoted = r.id === leaderId && votes > 0;
+
       return {
         ...r,
+        votes,
         categoryName,
         title: deriveTitle(r.title, categoryName),
         photoUrl: firstReportPhoto(r.report_images),
+        isTopVoted,
+        severity: isTopVoted ? "High" : r.severity || "Low",
       };
     });
 
@@ -1155,24 +1006,17 @@ export default function AssignmentsPage() {
     fetchOpenReports();
   }
 
-  async function handleAssign(report, assigneeType, assigneeValue) {
+  async function handleAssign(report, assigneeValue) {
     setAssigningId(report.id);
     setOpenError(null);
 
-    const assigneePayload =
-      assigneeType === "group"
-        ? { assigned_to_group_id: assigneeValue, assigned_to: null }
-        : { assigned_to: assigneeValue, assigned_to_group_id: null };
-
-    // Severity is derived on the backend from votes (see the DB trigger) —
-    // this only sets status, the assignee, and persists a title if the
-    // report never got one.
     const { error: updateErr } = await supabase
       .from("reports")
       .update({
         status: "under_review",
         title: report.title,
-        ...assigneePayload,
+        assigned_to: assigneeValue,
+        assigned_to_group_id: null,
         assigned_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -1187,8 +1031,6 @@ export default function AssignmentsPage() {
 
     setOpenReports((list) => list.filter((r) => r.id !== report.id));
     setToast(`"${report.title}" assigned`);
-    // The realtime subscription below picks up the status change and
-    // refreshes the active-assignments list automatically.
   }
 
   const filteredOpenReports = useMemo(() => {
@@ -1204,12 +1046,8 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     fetchAssignments();
-    fetchDirectories();
-  }, [fetchAssignments, fetchDirectories]);
+  }, [fetchAssignments]);
 
-  // Realtime: a report moving into/out of in_progress/under_review from
-  // ReportsPage (or anywhere else) updates this list immediately, and so
-  // does any change to a linked event (scheduled/completed/cancelled).
   useEffect(() => {
     const channel = supabase
       .channel("assignments-list")
@@ -1268,8 +1106,6 @@ export default function AssignmentsPage() {
     updateStatus(id, "resolved", "Report marked completed");
   }
 
-  /* Drives the Under Review / In Progress / Completed stepper on cards
-     and in the view modal — settable directly to any of the 3 stages. */
   function handleStageChange(id, stageKey) {
     if (stageKey === "completed") {
       handleComplete(id);
@@ -1318,42 +1154,42 @@ export default function AssignmentsPage() {
   ];
 
   return (
-    <div style={{ padding: "36px 40px 80px", maxWidth: 1240, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 26, gap: 16, flexWrap: "wrap" }}>
+    <div className="home-page" style={{ backgroundColor: "#f3f4f6", minHeight: "100vh", paddingTop: 20, paddingBottom: 0, paddingLeft: 40 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: "0 0 4px", fontSize: 26, fontWeight: 800, letterSpacing: "-.01em", color: COLORS.ink900 }}>Assignments</h1>
-          <p style={{ margin: 0, color: COLORS.ink500, fontSize: 13.5 }}>Reports currently in progress or under review, live from the reports table.</p>
+          <h1 style={{ margin: "0 0 3px", fontWeight: 800, letterSpacing: "-.01em", color: COLORS.ink900 }}>Assignments</h1>
+          <p style={{ margin: 0, color: COLORS.ink500, fontSize: 11.5 }}>Reports currently in progress or under review, ordered by community vote count.</p>
         </div>
         <Btn variant="primary" onClick={openNewAssignmentModal}>
-          <Plus size={15} /> New Assignment
+          <Plus size={13} /> New Assignment
         </Btn>
       </div>
 
       {error && (
-        <div style={{ background: COLORS.red100, color: "#991B1B", borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
+        <div style={{ background: COLORS.red100, color: "#991B1B", borderRadius: 10, padding: "9px 12px", fontSize: 12, marginBottom: 14 }}>
           {error}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 18 }}>
-        <div style={{ flex: 1, minWidth: 220, display: "flex", alignItems: "center", gap: 9, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 11, padding: "10px 14px" }}>
-          <Search size={15} color={COLORS.ink500} />
+      <div style={{ display: "flex", gap: 9, alignItems: "center", flexWrap: "wrap", marginBottom: 13 }}>
+        <div style={{ flex: 1, minWidth: 200, display: "flex", alignItems: "center", gap: 8, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 10, padding: "8px 12px" }}>
+          <Search size={13} color={COLORS.ink500} />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search assignments…"
-            style={{ border: "none", outline: "none", fontSize: 13.5, fontFamily: "inherit", width: "100%", background: "transparent", color: COLORS.ink900 }}
+            style={{ border: "none", outline: "none", fontSize: 12, fontFamily: "inherit", width: "100%", background: "transparent", color: COLORS.ink900 }}
           />
         </div>
-        <div style={{ display: "flex", gap: 6, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 11, padding: 4, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 5, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 10, padding: 3, flexWrap: "wrap" }}>
           {filterTabs.map((tab) => (
             <div
               key={tab.key}
               onClick={() => setFilter(tab.key)}
               style={{
-                padding: "8px 14px",
-                borderRadius: 8,
-                fontSize: 12.5,
+                padding: "6px 11px",
+                borderRadius: 7,
+                fontSize: 11,
                 fontWeight: 600,
                 cursor: "pointer",
                 whiteSpace: "nowrap",
@@ -1367,7 +1203,7 @@ export default function AssignmentsPage() {
         </div>
       </div>
 
-      <div style={{ fontSize: 12.5, color: COLORS.ink500, marginBottom: 14 }}>
+      <div style={{ fontSize: 11, color: COLORS.ink500, marginBottom: 11 }}>
         {loading ? "Loading assignments…" : `Showing ${filtered.length} of ${assignments.length} assignment${assignments.length !== 1 ? "s" : ""}`}
       </div>
 
@@ -1380,7 +1216,7 @@ export default function AssignmentsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState title="No matching assignments" text="Try a different search term or filter." />
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))", gap: 12 }}>
           {filtered.map((a) => (
             <AssignmentCard
               key={a.id}
@@ -1398,7 +1234,6 @@ export default function AssignmentsPage() {
       <ViewModal
         assignment={viewedAssignment}
         busy={busyId === viewId}
-        groups={groups}
         savingAssignedTo={savingAssignedTo}
         onSaveAssignedTo={saveAssignedTo}
         onOpenSchedule={openSchedule}
@@ -1427,12 +1262,12 @@ export default function AssignmentsPage() {
         reports={filteredOpenReports}
         search={openSearch}
         onSearch={setOpenSearch}
-        groups={groups}
         onAssign={handleAssign}
         assigningId={assigningId}
         onClose={() => setShowNewModal(false)}
       />
       <Toast message={toast} />
+      <Footer/>
     </div>
   );
 }

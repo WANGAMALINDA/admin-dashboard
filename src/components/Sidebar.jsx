@@ -24,6 +24,7 @@ import {
 
 const navItems = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "reports", label: "Reports", icon: FolderOpen },
   { key: "assignments", label: "Assignments", icon: ClipboardList },
   { key: "analysis", label: "Analysis", icon: BarChart3 },
 ];

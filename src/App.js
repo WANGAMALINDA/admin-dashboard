@@ -5,6 +5,7 @@ import AdminLogin from './pages/AdminLogin'
 import ReportsPage from './pages/ReportsPage'
 import AssignmentsPage from './pages/AssignmentsPage'
 import AnalysisPage from './pages/AnalysisPage'
+import AdminLocations from './pages/AdminLocations'
 import Sidebar from './components/Sidebar'
 import './App.css';
 
@@ -51,9 +52,11 @@ function Dashboard() {
     ? <AssignmentsPage selectedCategory={selectedCategory} />
     : activePage === 'analysis'
     ? <AnalysisPage />
-    // 'dashboard' and 'reports' both show the same ReportsPage — there's
-    // no separate overview page yet, so Dashboard just aliases Reports.
-    : <ReportsPage selectedCategory={selectedCategory} />;
+    : activePage === 'reports'
+    ? <ReportsPage selectedCategory={selectedCategory} />
+    // 'dashboard' is now the Locations overview — stats, the live map, and
+    // the recent-locations table — so it's the map-driven home page.
+    : <AdminLocations />;
 
   return (
     <Sidebar
