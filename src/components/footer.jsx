@@ -7,7 +7,7 @@ const contactHref = `tel:${contactNumber}`;
 const footerLinks = [
     {
         title: "Support",
-        items: ["Help Center", "Contact Us","Privacy Policy"],
+        items: ["Contact Us","Privacy Policy"],
     },
 ];
 
