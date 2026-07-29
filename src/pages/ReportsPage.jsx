@@ -571,31 +571,7 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
         {/* Body: table + side panel */}
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 640px", minWidth: 0 }}>
-            {/* Filters */}
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-              <div style={{ flex: "1 1 220px", minWidth: 200, display: "flex", alignItems: "center", gap: 9, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 10, padding: "8px 12px" }}>
-                <Search size={13} color={COLORS.ink500} />
-                <input
-                  value={search}
-                  onChange={(e) => updateFilter(setSearch)(e.target.value)}
-                  placeholder="Search reports…"
-                  style={{ border: "none", outline: "none", fontSize: 12, fontFamily: "inherit", width: "100%", background: "transparent", color: COLORS.ink900 }}
-                />
-              </div>
-              <Select
-                value={category}
-                onChange={handleCategoryChange}
-                options={categories.map((c) => ({ value: c.category_name, label: c.category_name }))}
-                placeholder="All Categories"
-              />
-              <Select
-                value={status}
-                onChange={updateFilter(setStatus)}
-                options={STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_META[s].label }))}
-                placeholder="All Statuses"
-              />
-              <Btn variant="ghost"><Filter size={14} /> Filters</Btn>
-            </div>
+            
 
             <div style={{ fontSize: 11, color: COLORS.ink500, marginBottom: 8 }}>
               {loading ? "Loading reports…" : `Showing ${filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} reports`}
