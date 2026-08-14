@@ -29,6 +29,7 @@ import {
   User,
   Users,
   ThumbsUp,
+  RotateCcw,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -141,7 +142,7 @@ function PhotoThumb({ src, color, size = 40, radius = 10 }) {
 const STATUS_META = {
   open: { label: "Open", bg: COLORS.red100, fg: "#B91C1C" },
   in_progress: { label: "In Progress", bg: COLORS.amber100, fg: "#92400E" },
-  under_review: { label: "Under Review", bg: COLORS.EDE9FE, fg: "#6D28D9" },
+  under_review: { label: "Under Review", bg: "#EDE9FE", fg: "#6D28D9" },
   resolved: { label: "Resolved", bg: COLORS.green100, fg: COLORS.green700 },
   rejected: { label: "Rejected", bg: COLORS.red100, fg: "#991B1B" },
   closed: { label: "Closed", bg: COLORS.green100, fg: COLORS.green700 },
@@ -193,10 +194,23 @@ function IconBtn({ children, ...rest }) {
   );
 }
 
-function StatCard({ card }) {
+function StatCard({ card, active, onClick }) {
   const Icon = card.icon;
   return (
-    <div style={{ background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 12, padding: "13px 13px 12px", flex: "1 1 160px", minWidth: 150 }}>
+    <div
+      onClick={onClick}
+      style={{
+        background: "#fff",
+        border: `2px solid ${active ? card.color : COLORS.ink200}`,
+        borderRadius: 12,
+        padding: "13px 13px 12px",
+        flex: "1 1 160px",
+        minWidth: 150,
+        cursor: "pointer",
+        transition: "all 0.15s ease",
+        boxShadow: active ? `0 0 0 2px ${card.color}25` : "none",
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
         <div style={{ width: 26, height: 26, borderRadius: 8, background: card.bg, color: card.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Icon size={13} />
@@ -208,7 +222,7 @@ function StatCard({ card }) {
   );
 }
 
-function DonutChart({ segments, centerLabel, centerValue }) {
+function DonutChart({ segments, centerLabel, centerValue, onSegmentClick, activeCategory }) {
   const total = segments.reduce((s, x) => s + x.count, 0) || 1;
   let acc = 0;
   const stops = segments.map((s) => {
@@ -220,9 +234,9 @@ function DonutChart({ segments, centerLabel, centerValue }) {
   return (
     <div style={{ position: "relative", width: 120, height: 120, margin: "0 auto" }}>
       <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: segments.length ? `conic-gradient(${stops.map((s) => s.stop).join(", ")})` : COLORS.ink100 }} />
-      <div style={{ position: "absolute", inset: 16, borderRadius: "50%", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.ink900 }}>{centerValue}</div>
-        <div style={{ fontSize: 9.5, color: COLORS.ink500 }}>{centerLabel}</div>
+      <div style={{ position: "absolute", inset: 16, borderRadius: "50%", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 4 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.ink900 }}>{centerValue}</div>
+        <div style={{ fontSize: 9, color: COLORS.ink500 }}>{centerLabel}</div>
       </div>
     </div>
   );
@@ -488,7 +502,7 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
     const rejected = reports.filter((r) => r.status === "rejected").length;
     const underReview = reports.filter((r) => r.status === "under_review").length;
     return [
-      { key: "total", label: "Total Reports", value: total.toLocaleString(), icon: FileText, color: COLORS.green600, bg: COLORS.green100 },
+      { key: "all", label: "Total Reports", value: total.toLocaleString(), icon: FileText, color: COLORS.green600, bg: COLORS.green100 },
       { key: "in_progress", label: "In Progress", value: inProgress.toLocaleString(), icon: Clock, color: COLORS.amber500, bg: COLORS.amber100 },
       { key: "resolved", label: "Resolved", value: resolved.toLocaleString(), icon: CheckCircle2, color: COLORS.green600, bg: COLORS.green100 },
       { key: "rejected", label: "Rejected", value: rejected.toLocaleString(), icon: XCircle, color: "#DC2626", bg: COLORS.red100 },
@@ -544,9 +558,9 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
 
   return (
     <div className="home-page" style={{ backgroundColor: "#f3f4f6", minHeight: "100vh", paddingTop: 20, paddingBottom: 0, paddingLeft: 40, paddingRight: 30 }}>
-      <div style={{ maxWidth: 1300, margin: "0 10", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ maxWidth: 1300, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, gap: 12, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: "0 0 3px", fontWeight: 800, letterSpacing: "-.01em", color: COLORS.ink900 }}>Reports</h1>
             <p style={{ margin: 0, color: COLORS.ink500, fontSize: 11.5 }}>View, manage and monitor all reported issues on the platform.</p>
@@ -564,11 +578,84 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
           </div>
         )}
 
-        {/* Stat cards */}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        {/* Interactive Stat cards (Clicking filters by status) */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {statCards.map((c) => (
-            <StatCard key={c.key} card={c} />
+            <StatCard
+              key={c.key}
+              card={c}
+              active={status === c.key}
+              onClick={() => {
+                setStatus(c.key);
+                setPage(1);
+              }}
+            />
           ))}
+        </div>
+
+        {/* Filters Toolbar */}
+        <div style={{ background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 12, padding: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {/* Search Input */}
+          <div style={{ position: "relative", flex: "1 1 240px", minWidth: 220 }}>
+            <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.ink500 }} />
+            <input
+              type="text"
+              placeholder="Search title, ID, location..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              style={{ width: "100%", padding: "9px 12px 9px 36px", fontSize: 13, borderRadius: 10, border: `1px solid ${COLORS.ink200}`, background: "#fff", color: COLORS.ink900, outline: "none", boxSizing: "border-box" }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: COLORS.ink500 }}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter */}
+          <select
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setPage(1);
+              if (onCategoryChange) onCategoryChange(e.target.value);
+            }}
+            style={{ padding: "9px 12px", fontSize: 13, borderRadius: 10, border: `1px solid ${COLORS.ink200}`, background: "#fff", color: COLORS.ink700, minWidth: 170 }}
+          >
+            <option value="all">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.category_name}</option>
+            ))}
+          </select>
+
+          {/* Status Filter */}
+          <select
+            value={status}
+            onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+            style={{ padding: "9px 12px", fontSize: 13, borderRadius: 10, border: `1px solid ${COLORS.ink200}`, background: "#fff", color: COLORS.ink700, minWidth: 160 }}
+          >
+            <option value="all">All Statuses</option>
+            {STATUS_OPTIONS.map((st) => (
+              <option key={st} value={st}>{STATUS_META[st].label}</option>
+            ))}
+          </select>
+
+          {/* Reset Filters */}
+          {(search || category !== "all" || status !== "all") && (
+            <Btn
+              variant="ghost"
+              onClick={() => {
+                setSearch("");
+                setCategory("all");
+                setStatus("all");
+                setPage(1);
+                if (onCategoryChange) onCategoryChange("all");
+              }}
+              style={{ padding: "9px 14px", color: COLORS.red500, borderColor: COLORS.red500 }}
+            >
+              <RotateCcw size={13} style={{ marginRight: 4 }} /> Reset Filters
+            </Btn>
+          )}
         </div>
 
         {/* Body: table + side panel */}
@@ -664,26 +751,47 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
             </div>
           </div>
 
-          {/* Side panel: donut + top categories */}
+          {/* Side panel: donut + interactive categories breakdown */}
           <div style={{ flex: "0 0 260px", width: 260, background: "#fff", border: `1px solid ${COLORS.ink200}`, borderRadius: 12, padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 11 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.ink900 }}>Report Overview</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.ink900 }}>Report Breakdown</div>
             </div>
 
-            <DonutChart segments={categoryBreakdown} centerValue={reports.length.toLocaleString()} centerLabel="Total" />
+            <DonutChart segments={categoryBreakdown} centerValue={filtered.length.toLocaleString()} centerLabel="Filtered" />
 
             <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 7 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: COLORS.ink500 }}>Top Categories</div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: COLORS.ink500 }}>Filter by Category</div>
               {categoryBreakdown.length === 0 ? (
                 <div style={{ fontSize: 11, color: COLORS.ink500 }}>No data yet.</div>
               ) : (
-                categoryBreakdown.slice(0, 6).map((c) => (
-                  <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.color, flexShrink: 0 }} />
-                    <span style={{ flex: 1, color: COLORS.ink700 }}>{c.name}</span>
-                    <span style={{ fontWeight: 700, color: COLORS.ink900 }}>{c.count}</span>
-                  </div>
-                ))
+                categoryBreakdown.map((c) => {
+                  const isSelected = category.toLowerCase() === c.name.toLowerCase();
+                  return (
+                    <div
+                      key={c.name}
+                      onClick={() => {
+                        setCategory(isSelected ? "all" : c.name);
+                        setPage(1);
+                        if (onCategoryChange) onCategoryChange(isSelected ? "all" : c.name);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 10.5,
+                        cursor: "pointer",
+                        padding: "4px 6px",
+                        borderRadius: 6,
+                        background: isSelected ? COLORS.ink100 : "transparent",
+                        transition: "background 0.1s ease",
+                      }}
+                    >
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.color, flexShrink: 0 }} />
+                      <span style={{ flex: 1, color: COLORS.ink700, fontWeight: isSelected ? 700 : 400 }}>{c.name}</span>
+                      <span style={{ fontWeight: 700, color: COLORS.ink900 }}>{c.count}</span>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
