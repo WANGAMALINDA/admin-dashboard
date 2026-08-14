@@ -22,7 +22,22 @@ import {
   XCircle,
   Flame,
   ArrowBigUp,
+  UploadCloud
 } from "lucide-react";
+
+/* ------------------------------------------------------------------ */
+/* Assignable Staff List                                               */
+/* ------------------------------------------------------------------ */
+const ASSIGNABLE_STAFF = [
+  { id: "1", name: "John Mokoena" },
+  { id: "2", name: "Wanga Malinda" },
+  { id: "3", name: "Duncan Maluleke" },
+  { id: "4", name: "Neliswa Mogashane" },
+  { id: "5", name: "Ipfi Brandley Khomola" },
+  { id: "6", name: "Reabetswe Molope" },
+  { id: "7", name: "Katekani Nxalati Maluleke" },
+  { id: "8", name: "Dembe Mudanabula" },
+];
 
 /* ------------------------------------------------------------------ */
 /* Design tokens                                                       */
@@ -48,6 +63,7 @@ const COLORS = {
   ink300: "#D1D5DB",
   ink200: "#E5E7EB",
   ink100: "#F3F4F6",
+  ink50: "#F9FAFB",
 };
 
 const ACTIVE_STATUSES = ["in_progress", "under_review"];
@@ -408,12 +424,18 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveA
           <div style={rowLabelStyle()}>Assigned to</div>
           {editingAssignee ? (
             <div style={{ display: "flex", gap: 6 }}>
-              <input
+              <select
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
-                placeholder="Type person or group name…"
-                style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit" }}
-              />
+                style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}
+              >
+                <option value="">Select staff member…</option>
+                {ASSIGNABLE_STAFF.map((staff) => (
+                  <option key={staff.id} value={staff.name}>
+                    {staff.name}
+                  </option>
+                ))}
+              </select>
               <IconBtn onClick={saveAssignee} disabled={savingAssignedTo || !draftName.trim()}>
                 {savingAssignedTo ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={13} />}
               </IconBtn>
@@ -537,6 +559,102 @@ function RejectModal({ assignment, onCancel, onConfirm }) {
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <Btn variant="ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onCancel}>Cancel</Btn>
           <Btn variant="danger" style={{ flex: 1, justifyContent: "center" }} onClick={onConfirm}>Reject</Btn>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+function CompleteModal({ assignment, onCancel, onConfirm, completing }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState("");
+  const [comment, setComment] = useState("");
+
+  function handleFileChange(e) {
+    const selected = e.target.files && e.target.files[0];
+    if (selected) {
+      setFile(selected);
+      setPreview(URL.createObjectURL(selected));
+    }
+  }
+
+  if (!assignment) return null;
+
+  return (
+    <Overlay onClose={completing ? undefined : onCancel}>
+      <div style={{ ...modalStyle(), maxWidth: 420, textAlign: "center" }}>
+        <div style={{ width: 52, height: 52, borderRadius: "50%", background: COLORS.green100, color: COLORS.green600, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <CheckCircle2 size={24} />
+        </div>
+        <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800 }}>Complete Assignment</h2>
+        <p style={{ color: COLORS.ink500, fontSize: 13, margin: "8px 0 16px" }}>
+          Upload a proof image and leave a comment to mark <b>"{assignment.title}"</b> as completed.
+        </p>
+
+        <div style={{ marginBottom: 16, textAlign: "left" }}>
+          <div style={rowLabelStyle()}>Proof Image (Device Upload)</div>
+          <div
+            style={{
+              position: "relative",
+              border: `2px dashed ${COLORS.ink200}`,
+              borderRadius: 10,
+              padding: preview ? 8 : 20,
+              textAlign: "center",
+              background: COLORS.ink50,
+              transition: "all 0.2s ease",
+            }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              disabled={completing}
+              style={{
+                position: "absolute",
+                inset: 0,
+                opacity: 0,
+                cursor: completing ? "not-allowed" : "pointer",
+                width: "100%",
+                height: "100%",
+                zIndex: 10,
+              }}
+            />
+            {preview ? (
+              <img
+                src={preview}
+                alt="Proof preview"
+                style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, display: "block" }}
+              />
+            ) : (
+              <div style={{ color: COLORS.ink500, fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <UploadCloud size={26} color={COLORS.ink400} />
+                <span style={{ fontWeight: 600, color: COLORS.ink700 }}>Click or drag image here</span>
+                <span style={{ fontSize: 11 }}>JPEG, PNG up to 5MB</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20, textAlign: "left" }}>
+          <div style={rowLabelStyle()}>Resolution Comment / Notes</div>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Describe the fix or leave details about the issue..."
+            rows={3}
+            disabled={completing}
+            style={{ ...fieldStyle(), resize: "vertical" }}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn variant="ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onCancel} disabled={completing}>
+            Cancel
+          </Btn>
+          <Btn variant="primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => onConfirm(file, comment)} disabled={completing || !file}>
+            {completing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <CheckCircle2 size={15} />}
+            Submit Proof
+          </Btn>
         </div>
       </div>
     </Overlay>
@@ -673,13 +791,19 @@ function NewAssignmentRow({ report, onAssign, assigning }) {
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        <input
+        <select
           value={assigneeName}
           onChange={(e) => setAssigneeName(e.target.value)}
-          placeholder="Type person or group name…"
           disabled={assigning}
-          style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", boxSizing: "border-box" }}
-        />
+          style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", boxSizing: "border-box", background: "#fff" }}
+        >
+          <option value="">Select staff member…</option>
+          {ASSIGNABLE_STAFF.map((staff) => (
+            <option key={staff.id} value={staff.name}>
+              {staff.name}
+            </option>
+          ))}
+        </select>
         <Btn
           variant="primary"
           style={{ padding: "8px 14px", flexShrink: 0 }}
@@ -755,7 +879,7 @@ function NewAssignmentModal({ open, loading, error, reports, search, onSearch, o
 function Overlay({ onClose, children }) {
   return (
     <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && onClose) onClose(); }}
       style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,.5)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 100 }}
     >
       {children}
@@ -804,12 +928,14 @@ export default function AssignmentsPage() {
 
   const [savingAssignedTo, setSavingAssignedTo] = useState(false);
 
+  const [completeTarget, setCompleteTarget] = useState(null);
+  const [completing, setCompleting] = useState(false);
+
   const [scheduleTarget, setScheduleTarget] = useState(null);
   const [scheduling, setScheduling] = useState(false);
   const [scheduleError, setScheduleError] = useState(null);
   const [eventBusyId, setEventBusyId] = useState(null);
 
-  // Fetch assignments ordered by vote count descending, mirroring homepage priority
   const fetchAssignments = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -834,7 +960,6 @@ export default function AssignmentsPage() {
       return;
     }
 
-    // Determine the report with the highest vote count > 0 to auto-escalate priority
     let leaderId = null;
     let maxVotes = 0;
     (data || []).forEach((r) => {
@@ -1101,18 +1226,72 @@ export default function AssignmentsPage() {
     }, 260);
   }
 
-  function handleComplete(id) {
-    setViewId(null);
-    updateStatus(id, "resolved", "Report marked completed");
-  }
-
   function handleStageChange(id, stageKey) {
     if (stageKey === "completed") {
-      handleComplete(id);
+      const target = assignments.find((a) => a.id === id);
+      setCompleteTarget(target);
       return;
     }
     const stage = STAGE_OPTIONS.find((s) => s.key === stageKey);
     updateStatus(id, stage.dbStatus, `Set to ${stage.label}`);
+  }
+
+  async function confirmComplete(file, comment) {
+    if (!completeTarget) return;
+    setCompleting(true);
+    setError(null);
+
+    let proofUrl = null;
+
+    if (file) {
+      const ext = file.name.split('.').pop();
+      const fileName = `proof_${completeTarget.id}_${Date.now()}.${ext}`;
+      
+      const { error: uploadErr } = await supabase.storage
+        .from("images")
+        .upload(fileName, file);
+
+      if (uploadErr) {
+        setError(uploadErr.message);
+        setCompleting(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("images")
+        .getPublicUrl(fileName);
+        
+      proofUrl = urlData.publicUrl;
+    }
+
+    const { error: updateErr } = await supabase
+      .from("reports")
+      .update({
+        status: "resolved",
+        updated_at: new Date().toISOString(),
+        ...(proofUrl ? { proof_image_url: proofUrl } : {}),
+        ...(comment ? { resolution_notes: comment } : {})
+      })
+      .eq("id", completeTarget.id);
+
+    setCompleting(false);
+
+    if (updateErr) {
+      setError(updateErr.message);
+      return;
+    }
+
+    setToast("Report marked completed with proof and notes");
+    setViewId(null); 
+
+    const id = completeTarget.id;
+    setCompleteTarget(null); 
+    
+    setRemovingId(id);
+    setTimeout(() => {
+      setAssignments((list) => list.filter((a) => a.id !== id));
+      setRemovingId(null);
+    }, 260);
   }
 
   function handleRejectConfirm() {
@@ -1242,6 +1421,12 @@ export default function AssignmentsPage() {
         onClose={() => setViewId(null)}
         onStageChange={handleStageChange}
         onReject={setRejectId}
+      />
+      <CompleteModal
+        assignment={completeTarget}
+        onCancel={() => setCompleteTarget(null)}
+        onConfirm={confirmComplete}
+        completing={completing}
       />
       <RejectModal
         assignment={rejectingAssignment}

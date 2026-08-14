@@ -15,7 +15,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px;
+  padding: 24px 16px; /* Reduced outer padding for smaller screens */
   background: radial-gradient(circle at top, rgba(59, 183, 143, 0.2), transparent 18%),
     linear-gradient(135deg, #091429 0%, #0b1b3a 100%);
 }
@@ -99,9 +99,8 @@
 }
 
 .admin-field-group input {
-  width: 100%;
   padding: 14px 16px;
-  font-size: 1rem;
+  font-size: 1rem; /* 16px prevents automatic zoom on mobile browsers */
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.05);
@@ -112,6 +111,11 @@
 
 .admin-field-group input::placeholder {
   color: rgba(255, 255, 255, 0.45);
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .admin-field-group input:focus {
@@ -121,6 +125,7 @@
 }
 
 .admin-password-row {
+  position: relative; /* Allows absolute positioning of the toggle button inside input field bounds if desired */
   display: grid;
   gap: 12px;
 }
@@ -134,6 +139,7 @@
   cursor: pointer;
   font-size: 0.95rem;
   justify-self: flex-end;
+  padding: 4px 0; /* Expanded touch target for mobile */
 }
 
 .admin-actions {
@@ -194,12 +200,48 @@
   font-size: 0.92rem;
 }
 
+.admin-field-group input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+@media (max-width: 480px) {
+  .admin-field-group input::placeholder {
+    font-size: 0.88rem;
+  }
+}
+
+/* Mobile Adjustments */
 @media (max-width: 640px) {
+  .admin-auth-page {
+    padding: 12px; /* Tighter padding on very small viewports */
+    align-items: flex-start; /* Aligns card closer to top on small screens to prevent keyboard overflow issues */
+  }
+
   .admin-auth-card {
-    padding: 28px 22px;
+    padding: 24px 18px; /* Compact internal card spacing */
+    border-radius: 20px;
   }
 
   .admin-auth-title {
-    font-size: 1.85rem;
+    font-size: 1.65rem; /* Scaled down header size for smaller displays */
+  }
+
+  .admin-auth-copy,
+  .admin-notice {
+    font-size: 0.9rem; /* Slightly smaller body text to save vertical space */
+  }
+
+  .admin-lozenge {
+    margin-bottom: 16px;
+  }
+
+  .admin-auth-form {
+    margin-top: 24px;
+    gap: 14px;
   }
 }

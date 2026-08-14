@@ -158,9 +158,6 @@ function AdminLogin() {
 
           <div className="admin-actions">
             <div />
-            <a className="admin-forgot" href="#">
-              Forgot password?
-            </a>
           </div>
 
           {authError && (

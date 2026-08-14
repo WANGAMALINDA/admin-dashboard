@@ -59,6 +59,17 @@ const COLORS = {
   ink100: "#F3F4F6",
 };
 
+const ASSIGNABLE_STAFF = [
+  { id: "1", name: "John Mokoena" },
+  { id: "2", name: "Wanga Malinda" },
+  { id: "3", name: "Duncan Maluleke" },
+  { id: "4", name: "Neliswa Mogashane" },
+  { id: "5", name: "Ipfi Brandley Khomola" },
+  { id: "6", name: "Reabetswe Molope" },
+  { id: "7", name: "Katekani Nxalati Maluleke" },
+  { id: "8", name: "Dembe Mudanabula" },
+];
+
 const CATEGORY_ICON_FALLBACKS = [
   { match: /water|sanitation|sewer|pipe|leak/i, icon: Droplet, color: "#3B82F6" },
   { match: /road|infrastructure|pothole|traffic|bridge/i, icon: TriangleAlert, color: "#F59E0B" },
@@ -130,7 +141,7 @@ function PhotoThumb({ src, color, size = 40, radius = 10 }) {
 const STATUS_META = {
   open: { label: "Open", bg: COLORS.red100, fg: "#B91C1C" },
   in_progress: { label: "In Progress", bg: COLORS.amber100, fg: "#92400E" },
-  under_review: { label: "Under Review", bg: "#EDE9FE", fg: "#6D28D9" },
+  under_review: { label: "Under Review", bg: COLORS.EDE9FE, fg: "#6D28D9" },
   resolved: { label: "Resolved", bg: COLORS.green100, fg: COLORS.green700 },
   rejected: { label: "Rejected", bg: COLORS.red100, fg: "#991B1B" },
   closed: { label: "Closed", bg: COLORS.green100, fg: COLORS.green700 },
@@ -179,36 +190,6 @@ function IconBtn({ children, ...rest }) {
     <button {...rest} style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${COLORS.ink200}`, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: rest.disabled ? "not-allowed" : "pointer", color: COLORS.ink500, flexShrink: 0 }}>
       {children}
     </button>
-  );
-}
-
-function Select({ value, onChange, options, placeholder }) {
-  return (
-    <div style={{ position: "relative" }}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          appearance: "none",
-          WebkitAppearance: "none",
-          background: "#fff",
-          border: `1px solid ${COLORS.ink200}`,
-          borderRadius: 10,
-          padding: "10px 30px 10px 14px",
-          fontSize: 13,
-          fontWeight: 500,
-          color: COLORS.ink700,
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
-      >
-        <option value="all">{placeholder}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-      <ChevronDown size={14} color={COLORS.ink500} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-    </div>
   );
 }
 
@@ -299,15 +280,24 @@ function ReportViewModal({ report, onClose }) {
           <div style={{ fontSize: 13.5, color: COLORS.ink900 }}>{report.location || "Not specified"}</div>
         </div>
 
+        {/* Assignee Selection Field */}
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: COLORS.ink500, marginBottom: 4 }}>Assigned to</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: COLORS.ink900 }}>
-            {report.assignee.label ? (
-              <>{report.assignee.type === "group" ? <Users size={14} color={COLORS.ink500} /> : <User size={14} color={COLORS.ink500} />} {report.assignee.label}</>
-            ) : (
-              <span style={{ color: COLORS.ink500 }}>Unassigned — manage this from the Assignments page</span>
-            )}
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: COLORS.ink500, marginBottom: 6 }}>
+            Assign to Staff Member
           </div>
+          <select
+            value={report.assigned_to || ""}
+            onChange={(e) => report.onAssigneeChange(report.id, e.target.value)}
+            disabled={report.updating}
+            style={{ width: "100%", padding: "10px 12px", fontSize: 13.5, borderRadius: 10, border: `1px solid ${COLORS.ink200}`, background: "#fff", color: COLORS.ink900, boxSizing: "border-box" }}
+          >
+            <option value="">Unassigned</option>
+            {ASSIGNABLE_STAFF.map((staff) => (
+              <option key={staff.id} value={staff.name}>
+                {staff.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -354,14 +344,6 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
     setCategory(selectedCategory);
     setPage(1);
   }, [selectedCategory]);
-
-  const handleCategoryChange = (val) => {
-    setCategory(val);
-    setPage(1);
-    if (onCategoryChange) {
-      onCategoryChange(val);
-    }
-  };
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -456,6 +438,29 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
     }
   }
 
+  async function handleAssigneeChange(id, assignedName) {
+    setUpdatingId(id);
+    setReports((list) =>
+      list.map((r) => (r.id === id ? { ...r, assigned_to: assignedName || null, assignee: { type: "user", label: assignedName || null } } : r))
+    );
+
+    const { error: updateErr } = await supabase
+      .from("reports")
+      .update({
+        assigned_to: assignedName || null,
+        assigned_at: assignedName ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    setUpdatingId(null);
+
+    if (updateErr) {
+      setError(updateErr.message);
+      fetchReports();
+    }
+  }
+
   const filtered = useMemo(() => {
     return reports.filter((r) => {
       if (category !== "all") {
@@ -475,13 +480,6 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  function updateFilter(setter) {
-    return (v) => {
-      setter(v);
-      setPage(1);
-    };
-  }
 
   const statCards = useMemo(() => {
     const total = reports.length;
@@ -513,7 +511,12 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
   const viewingReport = useMemo(() => {
     const r = reports.find((x) => x.id === viewing);
     if (!r) return null;
-    return { ...r, onStatusChange: handleStatusChange, updating: updatingId === r.id };
+    return {
+      ...r,
+      onStatusChange: handleStatusChange,
+      onAssigneeChange: handleAssigneeChange,
+      updating: updatingId === r.id,
+    };
   }, [reports, viewing, updatingId]);
 
   function exportCsv() {
@@ -540,7 +543,7 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
   }
 
   return (
-    <div className="home-page" style={{ backgroundColor: "#f3f4f6", minHeight: "100vh", paddingTop: 20, paddingBottom: 0, paddingLeft: 40 }}>
+    <div className="home-page" style={{ backgroundColor: "#f3f4f6", minHeight: "100vh", paddingTop: 20, paddingBottom: 0, paddingLeft: 40, paddingRight: 30 }}>
       <div style={{ maxWidth: 1300, margin: "0 10", display: "flex", flexDirection: "column", gap: 20 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
@@ -571,8 +574,6 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
         {/* Body: table + side panel */}
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 640px", minWidth: 0 }}>
-            
-
             <div style={{ fontSize: 11, color: COLORS.ink500, marginBottom: 8 }}>
               {loading ? "Loading reports…" : `Showing ${filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} reports`}
             </div>
