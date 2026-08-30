@@ -93,7 +93,8 @@ function assigneeInfo(r, staffMap) {
   }
   if (r.assigned_to) {
     const staff = staffMap?.[r.assigned_to];
-    return { type: "user", label: staff ? staffDisplayName(staff) : "Unknown staff member" };
+    if (!staff) return { type: null, label: null };
+    return { type: "user", label: staffDisplayName(staff) };
   }
   return { type: null, label: null };
 }
