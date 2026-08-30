@@ -27,8 +27,9 @@ import {
 
 /* ------------------------------------------------------------------ */
 /* Assignable staff: fetched from `profiles` where role = 'staff'.    */
-/* Reports store the assignee's full_name in `assigned_to` (text),   */
-/* so staff-side lookups match on name, not on the profile's id.      */
+/* Reports store the assignee's profile UUID in `assigned_to` (text), */
+/* matching how Dashboard/Profile look up "assigned to me" work.      */
+/* The staff picker displays names but the value saved is the id.     */
 /* ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
@@ -72,11 +73,19 @@ function deriveTitle(title, categoryName) {
   return title || categoryName || "Untitled report";
 }
 
+// `r.assigned_to` stores the assigned staff member's profile UUID (matches
+// what Dashboard/Profile query against). The human-readable name is resolved
+// separately via a staffNameById lookup, since the id alone isn't friendly to display.
 function assigneeInfo(r) {
   if (r.assigned_to) {
-    return { type: "assigned", id: null, label: r.assigned_to };
+    return { type: "assigned", id: r.assigned_to };
   }
-  return { type: null, id: null, label: null };
+  return { type: null, id: null };
+}
+
+function resolveAssigneeName(assignee, staffNameById) {
+  if (!assignee?.id) return null;
+  return staffNameById[assignee.id] || assignee.id;
 }
 
 function firstReportPhoto(images) {
@@ -252,9 +261,10 @@ function StatusStepper({ status, busy, onChange, compact }) {
   );
 }
 
-function AssignmentCard({ a, removing, busy, onView, onStageChange, onReject }) {
+function AssignmentCard({ a, removing, busy, onView, onStageChange, onReject, staffNameById }) {
   const stale = isStale(a);
   const priorityStyle = PRIORITY_PILL[a.severity] || PRIORITY_PILL.Low;
+  const assigneeName = resolveAssigneeName(a.assignee, staffNameById);
 
   return (
     <div
@@ -310,7 +320,7 @@ function AssignmentCard({ a, removing, busy, onView, onStageChange, onReject }) 
       <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 10.5, color: COLORS.ink700 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <User size={11} color={COLORS.ink500} />
-          {a.assignee.label || <span style={{ color: COLORS.ink300 }}>Unassigned</span>}
+          {assigneeName || <span style={{ color: COLORS.ink300 }}>Unassigned</span>}
         </div>
         {a.nextEvent && (
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -355,9 +365,9 @@ function actionBtnStyle(color) {
   };
 }
 
-function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveAssignedTo, savingAssignedTo, onOpenSchedule, onEventStatusChange, eventBusyId, staffOptions }) {
+function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveAssignedTo, savingAssignedTo, onOpenSchedule, onEventStatusChange, eventBusyId, staffOptions, staffNameById }) {
   const [editingAssignee, setEditingAssignee] = useState(false);
-  const [draftName, setDraftName] = useState("");
+  const [draftId, setDraftId] = useState("");
 
   useEffect(() => {
     setEditingAssignee(false);
@@ -367,15 +377,16 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveA
   const a = assignment;
   const priorityStyle = PRIORITY_PILL[a.severity] || PRIORITY_PILL.Low;
   const events = [...(a.events || [])].sort((x, y) => new Date(x.start_date) - new Date(y.start_date));
+  const assigneeName = resolveAssigneeName(a.assignee, staffNameById);
 
   function startEditingAssignee() {
-    setDraftName(a.assignee.label || "");
+    setDraftId(a.assignee.id || "");
     setEditingAssignee(true);
   }
 
   function saveAssignee() {
-    if (!draftName.trim()) return;
-    onSaveAssignedTo(a.id, draftName.trim());
+    if (!draftId) return;
+    onSaveAssignedTo(a.id, draftId);
     setEditingAssignee(false);
   }
 
@@ -417,18 +428,18 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveA
           {editingAssignee ? (
             <div style={{ display: "flex", gap: 6 }}>
               <select
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
+                value={draftId}
+                onChange={(e) => setDraftId(e.target.value)}
                 style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}
               >
                 <option value="">Select staff member…</option>
                 {staffOptions.map((staff) => (
-                  <option key={staff.id} value={staff.full_name}>
+                  <option key={staff.id} value={staff.id}>
                     {staff.full_name}
                   </option>
                 ))}
               </select>
-              <IconBtn onClick={saveAssignee} disabled={savingAssignedTo || !draftName.trim()}>
+              <IconBtn onClick={saveAssignee} disabled={savingAssignedTo || !draftId}>
                 {savingAssignedTo ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={13} />}
               </IconBtn>
               <IconBtn onClick={() => setEditingAssignee(false)} disabled={savingAssignedTo}>
@@ -438,11 +449,11 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveA
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: COLORS.ink900 }}>
               <User size={14} color={COLORS.ink500} />
-              {a.assignee.label || <span style={{ color: COLORS.ink500 }}>Unassigned</span>}
+              {assigneeName || <span style={{ color: COLORS.ink500 }}>Unassigned</span>}
               <button onClick={startEditingAssignee} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.ink500, padding: 2, display: "flex" }}>
                 <Pencil size={12} />
               </button>
-              {a.assignee.label && (
+              {assigneeName && (
                 <button onClick={clearAssignee} disabled={savingAssignedTo} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.red500, padding: 2, display: "flex", fontSize: 11.5, fontWeight: 600 }}>
                   Unassign
                 </button>
@@ -753,9 +764,9 @@ function fieldStyle() {
 }
 
 function NewAssignmentRow({ report, onAssign, assigning, staffOptions }) {
-  const [assigneeName, setAssigneeName] = useState(""); 
+  const [assigneeId, setAssigneeId] = useState(""); 
   const priorityStyle = PRIORITY_PILL[report.severity] || PRIORITY_PILL.Low;
-  const canAssign = !!assigneeName.trim();
+  const canAssign = !!assigneeId;
 
   return (
     <div style={{ padding: "13px 4px", borderBottom: `1px solid ${COLORS.ink100}` }}>
@@ -784,14 +795,14 @@ function NewAssignmentRow({ report, onAssign, assigning, staffOptions }) {
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         <select
-          value={assigneeName}
-          onChange={(e) => setAssigneeName(e.target.value)}
+          value={assigneeId}
+          onChange={(e) => setAssigneeId(e.target.value)}
           disabled={assigning}
           style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", boxSizing: "border-box", background: "#fff" }}
         >
           <option value="">Select staff member…</option>
           {staffOptions.map((staff) => (
-            <option key={staff.id} value={staff.full_name}>
+            <option key={staff.id} value={staff.id}>
               {staff.full_name}
             </option>
           ))}
@@ -800,7 +811,7 @@ function NewAssignmentRow({ report, onAssign, assigning, staffOptions }) {
           variant="primary"
           style={{ padding: "8px 14px", flexShrink: 0 }}
           disabled={assigning || !canAssign}
-          onClick={() => onAssign(report, assigneeName.trim())}
+          onClick={() => onAssign(report, assigneeId)}
         >
           {assigning ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Plus size={13} />}
           Assign
@@ -949,6 +960,13 @@ export default function AssignmentsPage() {
       isMounted = false;
     };
   }, []);
+
+  // Lookup from staff profile id -> display name, used to render assignees
+  // (`reports.assigned_to` stores the id so it matches Dashboard/Profile queries).
+  const staffNameById = useMemo(
+    () => Object.fromEntries(staffOptions.map((s) => [s.id, s.full_name])),
+    [staffOptions]
+  );
 
   const fetchAssignments = useCallback(async () => {
     setLoading(true);
@@ -1419,6 +1437,7 @@ export default function AssignmentsPage() {
               onView={setViewId}
               onStageChange={handleStageChange}
               onReject={setRejectId}
+              staffNameById={staffNameById}
             />
           ))}
         </div>
@@ -1436,6 +1455,7 @@ export default function AssignmentsPage() {
         onStageChange={handleStageChange}
         onReject={setRejectId}
         staffOptions={staffOptions}
+        staffNameById={staffNameById}
       />
       <CompleteModal
         assignment={completeTarget}
