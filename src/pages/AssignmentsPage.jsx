@@ -26,18 +26,10 @@ import {
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
-/* Assignable Staff List                                               */
+/* Assignable staff: fetched from `profiles` where role = 'staff'.    */
+/* Reports store the assignee's full_name in `assigned_to` (text),   */
+/* so staff-side lookups match on name, not on the profile's id.      */
 /* ------------------------------------------------------------------ */
-const ASSIGNABLE_STAFF = [
-  { id: "1", name: "John Mokoena" },
-  { id: "2", name: "Wanga Malinda" },
-  { id: "3", name: "Duncan Maluleke" },
-  { id: "4", name: "Neliswa Mogashane" },
-  { id: "5", name: "Ipfi Brandley Khomola" },
-  { id: "6", name: "Reabetswe Molope" },
-  { id: "7", name: "Katekani Nxalati Maluleke" },
-  { id: "8", name: "Dembe Mudanabula" },
-];
 
 /* ------------------------------------------------------------------ */
 /* Design tokens                                                       */
@@ -363,7 +355,7 @@ function actionBtnStyle(color) {
   };
 }
 
-function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveAssignedTo, savingAssignedTo, onOpenSchedule, onEventStatusChange, eventBusyId }) {
+function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveAssignedTo, savingAssignedTo, onOpenSchedule, onEventStatusChange, eventBusyId, staffOptions }) {
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [draftName, setDraftName] = useState("");
 
@@ -430,9 +422,9 @@ function ViewModal({ assignment, onClose, onStageChange, onReject, busy, onSaveA
                 style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}
               >
                 <option value="">Select staff member…</option>
-                {ASSIGNABLE_STAFF.map((staff) => (
-                  <option key={staff.id} value={staff.name}>
-                    {staff.name}
+                {staffOptions.map((staff) => (
+                  <option key={staff.id} value={staff.full_name}>
+                    {staff.full_name}
                   </option>
                 ))}
               </select>
@@ -760,7 +752,7 @@ function fieldStyle() {
   return { width: "100%", border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" };
 }
 
-function NewAssignmentRow({ report, onAssign, assigning }) {
+function NewAssignmentRow({ report, onAssign, assigning, staffOptions }) {
   const [assigneeName, setAssigneeName] = useState(""); 
   const priorityStyle = PRIORITY_PILL[report.severity] || PRIORITY_PILL.Low;
   const canAssign = !!assigneeName.trim();
@@ -798,9 +790,9 @@ function NewAssignmentRow({ report, onAssign, assigning }) {
           style={{ flex: 1, border: `1px solid ${COLORS.ink200}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, fontFamily: "inherit", boxSizing: "border-box", background: "#fff" }}
         >
           <option value="">Select staff member…</option>
-          {ASSIGNABLE_STAFF.map((staff) => (
-            <option key={staff.id} value={staff.name}>
-              {staff.name}
+          {staffOptions.map((staff) => (
+            <option key={staff.id} value={staff.full_name}>
+              {staff.full_name}
             </option>
           ))}
         </select>
@@ -818,7 +810,7 @@ function NewAssignmentRow({ report, onAssign, assigning }) {
   );
 }
 
-function NewAssignmentModal({ open, loading, error, reports, search, onSearch, onAssign, assigningId, onClose }) {
+function NewAssignmentModal({ open, loading, error, reports, search, onSearch, onAssign, assigningId, onClose, staffOptions }) {
   if (!open) return null;
   return (
     <Overlay onClose={onClose}>
@@ -867,6 +859,7 @@ function NewAssignmentModal({ open, loading, error, reports, search, onSearch, o
                 report={r}
                 assigning={assigningId === r.id}
                 onAssign={onAssign}
+                staffOptions={staffOptions}
               />
             ))
           )}
@@ -935,6 +928,27 @@ export default function AssignmentsPage() {
   const [scheduling, setScheduling] = useState(false);
   const [scheduleError, setScheduleError] = useState(null);
   const [eventBusyId, setEventBusyId] = useState(null);
+
+  // Staff who can be assigned reports — only profiles with role = 'staff'.
+  const [staffOptions, setStaffOptions] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadStaff() {
+      const { data, error: staffErr } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("role", "staff")
+        .order("full_name", { ascending: true });
+      if (!staffErr && isMounted) {
+        setStaffOptions((data || []).filter((s) => s.full_name));
+      }
+    }
+    loadStaff();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const fetchAssignments = useCallback(async () => {
     setLoading(true);
@@ -1421,6 +1435,7 @@ export default function AssignmentsPage() {
         onClose={() => setViewId(null)}
         onStageChange={handleStageChange}
         onReject={setRejectId}
+        staffOptions={staffOptions}
       />
       <CompleteModal
         assignment={completeTarget}
@@ -1450,6 +1465,7 @@ export default function AssignmentsPage() {
         onAssign={handleAssign}
         assigningId={assigningId}
         onClose={() => setShowNewModal(false)}
+        staffOptions={staffOptions}
       />
       <Toast message={toast} />
       <Footer/>
