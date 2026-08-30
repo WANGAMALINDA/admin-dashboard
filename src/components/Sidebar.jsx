@@ -53,6 +53,7 @@ const CATEGORY_VISUALS = [
   { test: (n) => /park|recreation|garden|green/i.test(n), icon: Trees, color: "#059669" },
 ];
 
+
 function getCategoryVisual(categoryName) {
   const name = (categoryName || "").toLowerCase();
   const match = CATEGORY_VISUALS.find((c) => c.test(name));

@@ -60,16 +60,9 @@ const COLORS = {
   ink100: "#F3F4F6",
 };
 
-const ASSIGNABLE_STAFF = [
-  { id: "1", name: "John Mokoena" },
-  { id: "2", name: "Wanga Malinda" },
-  { id: "3", name: "Duncan Maluleke" },
-  { id: "4", name: "Neliswa Mogashane" },
-  { id: "5", name: "Ipfi Brandley Khomola" },
-  { id: "6", name: "Reabetswe Molope" },
-  { id: "7", name: "Katekani Nxalati Maluleke" },
-  { id: "8", name: "Dembe Mudanabula" },
-];
+function staffDisplayName(staff) {
+  return staff.full_name || staff.username || "Unnamed staff";
+}
 
 const CATEGORY_ICON_FALLBACKS = [
   { match: /water|sanitation|sewer|pipe|leak/i, icon: Droplet, color: "#3B82F6" },
@@ -94,12 +87,13 @@ function deriveTitle(title, categoryName) {
   return title || categoryName || "Untitled report";
 }
 
-function assigneeInfo(r) {
+function assigneeInfo(r, staffMap) {
   if (r.assigned_to_group_id && r.assigned_group) {
     return { type: "group", label: r.assigned_group.name };
   }
   if (r.assigned_to) {
-    return { type: "user", label: r.assigned_to };
+    const staff = staffMap?.[r.assigned_to];
+    return { type: "user", label: staff ? staffDisplayName(staff) : "Unknown staff member" };
   }
   return { type: null, label: null };
 }
@@ -306,9 +300,9 @@ function ReportViewModal({ report, onClose }) {
             style={{ width: "100%", padding: "10px 12px", fontSize: 13.5, borderRadius: 10, border: `1px solid ${COLORS.ink200}`, background: "#fff", color: COLORS.ink900, boxSizing: "border-box" }}
           >
             <option value="">Unassigned</option>
-            {ASSIGNABLE_STAFF.map((staff) => (
-              <option key={staff.id} value={staff.name}>
-                {staff.name}
+            {(report.staffOptions || []).map((staff) => (
+              <option key={staff.id} value={staff.id}>
+                {staffDisplayName(staff)}
               </option>
             ))}
           </select>
@@ -344,6 +338,7 @@ const PAGE_SIZE = 8;
 export default function ReportsPage({ selectedCategory = "all", onCategoryChange }) {
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [staffOptions, setStaffOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
@@ -358,6 +353,23 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
     setCategory(selectedCategory);
     setPage(1);
   }, [selectedCategory]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStaff() {
+      const { data, error: staffErr } = await supabase
+        .from("profiles")
+        .select("id, full_name, username")
+        .eq("role", "staff")
+        .order("full_name", { ascending: true });
+      if (cancelled || staffErr) return;
+      setStaffOptions(data || []);
+    }
+    loadStaff();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -390,6 +402,16 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
       return;
     }
 
+    const assignedIds = [...new Set((reportRows || []).map((r) => r.assigned_to).filter(Boolean))];
+    let staffMap = {};
+    if (assignedIds.length) {
+      const { data: assignedProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, username")
+        .in("id", assignedIds);
+      staffMap = Object.fromEntries((assignedProfiles || []).map((p) => [p.id, p]));
+    }
+
     const activeReports = (reportRows || []).filter((r) =>
       ["open", "in_progress", "under_review"].includes(r.status)
     );
@@ -409,7 +431,7 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
         categoryName,
         title: deriveTitle(r.title, categoryName),
         photoUrl: firstReportPhoto(r.report_images),
-        assignee: assigneeInfo(r),
+        assignee: assigneeInfo(r, staffMap),
       };
     });
 
@@ -452,17 +474,26 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
     }
   }
 
-  async function handleAssigneeChange(id, assignedName) {
+  async function handleAssigneeChange(id, staffId) {
     setUpdatingId(id);
+    const staff = staffOptions.find((s) => s.id === staffId);
     setReports((list) =>
-      list.map((r) => (r.id === id ? { ...r, assigned_to: assignedName || null, assignee: { type: "user", label: assignedName || null } } : r))
+      list.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              assigned_to: staffId || null,
+              assignee: staffId ? { type: "user", label: staffDisplayName(staff || {}) } : { type: null, label: null },
+            }
+          : r
+      )
     );
 
     const { error: updateErr } = await supabase
       .from("reports")
       .update({
-        assigned_to: assignedName || null,
-        assigned_at: assignedName ? new Date().toISOString() : null,
+        assigned_to: staffId || null,
+        assigned_at: staffId ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
@@ -530,8 +561,9 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
       onStatusChange: handleStatusChange,
       onAssigneeChange: handleAssigneeChange,
       updating: updatingId === r.id,
+      staffOptions,
     };
-  }, [reports, viewing, updatingId]);
+  }, [reports, viewing, updatingId, staffOptions]);
 
   function exportCsv() {
     const header = ["ID", "Title", "Category", "Votes", "Status", "Priority", "Location", "Assigned to", "Created at"];
