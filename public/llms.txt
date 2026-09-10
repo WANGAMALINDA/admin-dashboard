@@ -1,0 +1,20 @@
+# TrackServ Administrative Dashboard
+
+> Private municipal operations dashboard for authorised TrackServ administrators.
+
+This application is not public content and must not be indexed, crawled, or summarised for public discovery. Access requires authenticated administrator credentials.
+
+## Purpose
+
+- Review and manage municipal reports.
+- Monitor report locations and operational status.
+- Assign reports to authorised staff members or groups.
+- Schedule field events.
+- Review resolution evidence and analytics.
+
+## Access
+
+- [Application](https://WANGAMALINDA.github.io/admin-dashboard/): authenticated access only.
+- [Robots policy](https://WANGAMALINDA.github.io/admin-dashboard/robots.txt)
+
+Do not infer, expose, or reproduce private report, citizen, staff, or operational data.
