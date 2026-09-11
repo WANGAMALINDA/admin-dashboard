@@ -336,6 +336,13 @@ function ReportViewModal({ report, onClose }) {
 
 const PAGE_SIZE = 8;
 
+function paginationItems(currentPage, totalPages) {
+  if (totalPages <= 6) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  if (currentPage <= 4) return [1, 2, 3, 4, 5, "ellipsis-end", totalPages];
+  if (currentPage >= totalPages - 3) return [1, "ellipsis-start", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  return [1, "ellipsis-start", currentPage - 1, currentPage, currentPage + 1, "ellipsis-end", totalPages];
+}
+
 export default function ReportsPage({ selectedCategory = "all", onCategoryChange }) {
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -772,10 +779,14 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <IconBtn onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>‹</IconBtn>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 5).map((n) => (
-                    <button key={n} onClick={() => setPage(n)} style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${COLORS.ink200}`, background: page === n ? COLORS.green600 : "#fff", color: page === n ? "#fff" : COLORS.ink700, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                      {n}
-                    </button>
+                  {paginationItems(page, totalPages).map((item) => (
+                    typeof item === "string" ? (
+                      <span key={item} style={{ width: 26, height: 26, display: "inline-flex", alignItems: "center", justifyContent: "center", color: COLORS.ink500, fontSize: 11 }} aria-hidden="true">...</span>
+                    ) : (
+                      <button key={item} onClick={() => setPage(item)} style={{ width: 26, height: 26, borderRadius: 7, border: `1px solid ${COLORS.ink200}`, background: page === item ? COLORS.green600 : "#fff", color: page === item ? "#fff" : COLORS.ink700, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                        {item}
+                      </button>
+                    )
                   ))}
                   <IconBtn onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>›</IconBtn>
                 </div>
