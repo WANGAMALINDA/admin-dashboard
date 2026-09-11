@@ -52,7 +52,11 @@ const MAP_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 
 function isVisibleOnMap(report) {
   if (!(report.status === "resolved" || report.status === "closed")) return true;
-  return Date.now() - new Date(report.updated_at || report.created_at).getTime() < MAP_RETENTION_MS;
+  const resolution = [...(report.issue_resolutions || [])]
+    .filter((item) => item.attended_at)
+    .sort((a, b) => new Date(b.attended_at) - new Date(a.attended_at))[0];
+  return !resolution?.attended_at
+    || Date.now() - new Date(resolution.attended_at).getTime() < MAP_RETENTION_MS;
 }
 const MAP_CENTER = [-25.7545, 28.2293]; // Pretoria, South Africa
 const DEFAULT_ZOOM = 13;
@@ -146,6 +150,7 @@ export default function AdminLocations() {
       .from("reports")
       .select(
         `id, title, description, location, latitude, longitude, status, severity, created_at, updated_at,
+         issue_resolutions(attended_at),
          category:categories(category_name),
          reporter:profiles!reports_user_id_fkey(full_name, username)`
       )
@@ -218,6 +223,7 @@ export default function AdminLocations() {
           reporter: report.reporter?.full_name || report.reporter?.username || "Unknown",
           date: report.created_at ? dateFormatter.format(new Date(report.created_at)) : "—",
           updated_at: report.updated_at,
+          issue_resolutions: report.issue_resolutions || [],
           lat: report.latitude != null ? Number(report.latitude) : null,
           lng: report.longitude != null ? Number(report.longitude) : null,
         };
