@@ -81,7 +81,7 @@ function AdminLogin() {
     }
 
     setSubmitting(false);
-    navigate("/dashboard");
+    navigate("/dashboard", { replace: true });
   };
 
   return (

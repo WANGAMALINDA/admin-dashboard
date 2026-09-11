@@ -387,7 +387,6 @@ export default function ReportsPage({ selectedCategory = "all", onCategoryChange
           assigned_group:groups!reports_assigned_to_group_id_fkey ( id, name ),
           report_images ( image_url, uploaded_at )
         `)
-        .order("votes", { ascending: false })
         .order("created_at", { ascending: false }),
       supabase.from("categories").select("id, category_name").order("category_name"),
     ]);

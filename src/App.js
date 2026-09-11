@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from './components/supabaseClient'
 import AdminLogin from './pages/AdminLogin'
 import ReportsPage from './pages/ReportsPage'
@@ -43,7 +43,9 @@ function useIdleLogout(timeoutMs) {
 
 function Dashboard() {
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [activePage, setActivePage] = useState('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activePage = location.pathname.split('/').filter(Boolean)[1] || 'dashboard';
 
   // Auto log out after 5 minutes of no user activity.
   useIdleLogout(SESSION_TIMEOUT_MS);
@@ -64,7 +66,7 @@ function Dashboard() {
   return (
     <Sidebar
       activePage={activePage}
-      onPageChange={setActivePage}
+      onPageChange={(page) => navigate(`/dashboard/${page}`)}
       selectedCategory={selectedCategory}
       onCategoryChange={setSelectedCategory}
     >
@@ -78,7 +80,7 @@ function App() {
     <HashRouter>
       <Routes>
         <Route path="/" element={<AdminLogin />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/*" element={<Dashboard />} />
         {/* Any unrecognized path (e.g. a stale/bad link) falls back to login
             instead of rendering a blank screen. */}
         <Route path="*" element={<Navigate to="/" replace />} />

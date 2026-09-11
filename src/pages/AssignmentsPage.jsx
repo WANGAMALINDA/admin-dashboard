@@ -983,7 +983,6 @@ export default function AssignmentsPage() {
         events ( id, event_name, description, location, event_date, start_date, end_date, status, notes, created_at )
       `)
       .in("status", ACTIVE_STATUSES)
-      .order("votes", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (fetchErr) {
@@ -1118,7 +1117,6 @@ export default function AssignmentsPage() {
         report_images ( image_url, uploaded_at )
       `)
       .eq("status", OPEN_STATUS)
-      .order("votes", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (fetchErr) {

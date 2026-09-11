@@ -48,6 +48,12 @@ const STATUS_META = {
 const OPEN_STATUSES = ["open", "in_progress", "under_review",];
 const OVERDUE_AFTER_DAYS = 7;
 const DEFAULT_MARKER_COLOR = "#059669";
+const MAP_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
+
+function isVisibleOnMap(report) {
+  if (!(report.status === "resolved" || report.status === "closed")) return true;
+  return Date.now() - new Date(report.updated_at || report.created_at).getTime() < MAP_RETENTION_MS;
+}
 const MAP_CENTER = [-25.7545, 28.2293]; // Pretoria, South Africa
 const DEFAULT_ZOOM = 13;
 
@@ -139,7 +145,7 @@ export default function AdminLocations() {
     const { data, error } = await supabase
       .from("reports")
       .select(
-        `id, title, description, location, latitude, longitude, status, severity, created_at,
+        `id, title, description, location, latitude, longitude, status, severity, created_at, updated_at,
          category:categories(category_name),
          reporter:profiles!reports_user_id_fkey(full_name, username)`
       )
@@ -211,6 +217,7 @@ export default function AdminLocations() {
           overdue,
           reporter: report.reporter?.full_name || report.reporter?.username || "Unknown",
           date: report.created_at ? dateFormatter.format(new Date(report.created_at)) : "—",
+          updated_at: report.updated_at,
           lat: report.latitude != null ? Number(report.latitude) : null,
           lng: report.longitude != null ? Number(report.longitude) : null,
         };
@@ -233,6 +240,8 @@ export default function AdminLocations() {
       return true;
     });
   }, [rows, selectedCategory, selectedStatus, searchQuery]);
+
+  const mapLocations = useMemo(() => filteredLocations.filter(isVisibleOnMap), [filteredLocations]);
 
   const recentLocations = useMemo(() => filteredLocations.slice(0, 4), [filteredLocations]);
 
@@ -418,7 +427,7 @@ export default function AdminLocations() {
                     ref={leafletMapRef}
                   >
                     <TileLayer key={mapMode} url={TILE_LAYERS[mapMode].url} attribution={TILE_LAYERS[mapMode].attribution} />
-                    {filteredLocations
+                    {mapLocations
                       .filter((item) => typeof item.lat === "number" && typeof item.lng === "number" && !Number.isNaN(item.lat) && !Number.isNaN(item.lng))
                       .map((item) => (
                         <CircleMarker

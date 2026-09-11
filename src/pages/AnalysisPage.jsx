@@ -194,7 +194,7 @@ export default function AnalysisPage() {
     const previousStart = new Date(currentStart.getTime() - days * 24 * 60 * 60 * 1000);
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-    const baseSelect = "id, status, severity, created_at, category:categories(category_name)";
+    const baseSelect = "id, status, severity, created_at, category:categories(category_name), issue_resolutions(attended_at)";
 
     const [{ data: current, error: currentError }, { data: previous, error: previousError }, { data: trend, error: trendError }, { data: cats }] = await Promise.all([
       supabase.from("reports").select(baseSelect).gte("created_at", currentStart.toISOString()),
@@ -264,10 +264,18 @@ export default function AnalysisPage() {
     const total = rows.length;
     const resolved = rows.filter((r) => RESOLVED_STATUSES.includes(r.status)).length;
     const overdue = rows.filter((r) => isOverdue(r)).length;
-    const resolvedAges = rows
+    const resolvedDurations = rows
       .filter((r) => RESOLVED_STATUSES.includes(r.status))
-      .map((r) => (Date.now() - new Date(r.created_at).getTime()) / (24 * 60 * 60 * 1000));
-    const avgAge = resolvedAges.length ? resolvedAges.reduce((a, b) => a + b, 0) / resolvedAges.length : 0;
+      .map((r) => {
+        const resolution = [...(r.issue_resolutions || [])]
+          .filter((item) => item.attended_at)
+          .sort((a, b) => new Date(b.attended_at) - new Date(a.attended_at))[0];
+        return resolution
+          ? (new Date(resolution.attended_at).getTime() - new Date(r.created_at).getTime()) / (24 * 60 * 60 * 1000)
+          : null;
+      })
+      .filter((duration) => duration !== null && duration >= 0);
+    const avgAge = resolvedDurations.length ? resolvedDurations.reduce((a, b) => a + b, 0) / resolvedDurations.length : 0;
     return { total, resolved, overdue, avgAge };
   };
 
