@@ -143,6 +143,11 @@ function formatDateTime(iso) {
   );
 }
 
+function toDateTimeLocalValue(date) {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 16);
+}
+
 const EVENT_STATUS_PILL = {
   scheduled: { bg: COLORS.blue100, fg: "#1D4ED8", label: "Scheduled" },
   completed: { bg: COLORS.green100, fg: COLORS.green700, label: "Completed" },
@@ -670,6 +675,8 @@ function ScheduleEventModal({ report, saving, error, onCancel, onSubmit }) {
   const [end, setEnd] = useState("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const minDateTime = toDateTimeLocalValue(new Date());
 
   useEffect(() => {
     if (report) {
@@ -678,18 +685,31 @@ function ScheduleEventModal({ report, saving, error, onCancel, onSubmit }) {
       setEnd("");
       setLocation(report.location || "");
       setNotes("");
+      setValidationError("");
     }
   }, [report?.id]);
 
   if (!report) return null;
 
-  const canSubmit = eventName.trim() && start;
+  const startDate = start ? new Date(start) : null;
+  const endDate = end ? new Date(end) : null;
+  const validStart = startDate && !isNaN(startDate.getTime()) && startDate.getTime() > Date.now();
+  const validEnd = !end || (endDate && !isNaN(endDate.getTime()) && endDate >= startDate);
+  const canSubmit = eventName.trim() && validStart && validEnd;
 
   function handleSubmit() {
-    if (!canSubmit) return;
+    if (!validStart) {
+      setValidationError("The visit must start in the future.");
+      return;
+    }
+    if (!validEnd) {
+      setValidationError("The visit end must be after its start.");
+      return;
+    }
+    setValidationError("");
     onSubmit({
       event_name: eventName.trim(),
-      start_date: new Date(start).toISOString(),
+      start_date: startDate.toISOString(),
       end_date: end ? new Date(end).toISOString() : null,
       location: location.trim() || null,
       notes: notes.trim() || null,
@@ -707,9 +727,9 @@ function ScheduleEventModal({ report, saving, error, onCancel, onSubmit }) {
           <IconBtn onClick={onCancel}><X size={15} /></IconBtn>
         </div>
 
-        {error && (
+        {(error || validationError) && (
           <div style={{ background: COLORS.red100, color: "#991B1B", borderRadius: 10, padding: "9px 13px", fontSize: 12.5, marginBottom: 12 }}>
-            {error}
+            {error || validationError}
           </div>
         )}
 
@@ -725,11 +745,11 @@ function ScheduleEventModal({ report, saving, error, onCancel, onSubmit }) {
         <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={rowLabelStyle()}>Starts</div>
-            <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} style={fieldStyle()} />
+            <input type="datetime-local" min={minDateTime} value={start} onChange={(e) => { setStart(e.target.value); setValidationError(""); }} style={fieldStyle()} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={rowLabelStyle()}>Ends (optional)</div>
-            <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} style={fieldStyle()} />
+            <input type="datetime-local" min={start || minDateTime} value={end} onChange={(e) => { setEnd(e.target.value); setValidationError(""); }} style={fieldStyle()} />
           </div>
         </div>
 
@@ -1054,6 +1074,18 @@ export default function AssignmentsPage() {
 
   async function submitSchedule(fields) {
     if (!scheduleTarget) return;
+
+    const startDate = new Date(fields.start_date);
+    const endDate = fields.end_date ? new Date(fields.end_date) : null;
+    if (isNaN(startDate.getTime()) || startDate.getTime() <= Date.now()) {
+      setScheduleError("The visit must start in the future.");
+      return;
+    }
+    if (endDate && (isNaN(endDate.getTime()) || endDate < startDate)) {
+      setScheduleError("The visit end must be after its start.");
+      return;
+    }
+
     setScheduling(true);
     setScheduleError(null);
 

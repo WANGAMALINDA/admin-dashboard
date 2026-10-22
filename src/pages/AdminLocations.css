@@ -823,17 +823,17 @@ tbody tr:hover {
     gap: 16px !important;
   }
 
-  /* Stats grid changes to a single-column layout on mobile */
+  /* Keep the dashboard stats on one row; narrow screens can scroll horizontally. */
   .stats-grid {
-    grid-template-columns: 1fr !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
     gap: 12px !important;
+    padding-bottom: 4px;
   }
 
-  /* Stat cards transform to vertical layout for mobile */
   .stat-card {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 12px !important;
+    flex: 0 0 160px;
   }
 
   .stat-card-top {
